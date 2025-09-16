@@ -34,6 +34,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
+    case WM_DESTROY:
+    {
+        PostQuitMessage(0);
+        return 0;
+    }
+    case WM_MOVE:
+    {
+        g_dxHandler->HandleWindowChange(hWnd);
+
+        return 0;
+    }
     case WM_SIZE:
     {
         if (wParam == SIZE_MINIMIZED)
@@ -49,26 +60,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
         break;
     }
-    case WM_DESTROY:
-    {
-        PostQuitMessage(0);
-        return 0;
-    }
+    case WM_KILLFOCUS:
     case WM_KEYDOWN:
     case WM_KEYUP:
-    case WM_INPUT:
-    case WM_KILLFOCUS:
-
-    case WM_RBUTTONDOWN:
-    case WM_RBUTTONUP:
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONUP:
+    case WM_INPUT:
     {
         return g_pInput->WndProc(hWnd, msg, wParam, lParam);
     }
     }
 
     return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+const HMONITOR GetNearestMonitorFromWindowHandle(const HWND hWND)
+{
+    return MonitorFromWindow(hWND, MONITOR_DEFAULTTONEAREST);
 }
 
 const HWND SetupWindow()

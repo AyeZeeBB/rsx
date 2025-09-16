@@ -436,20 +436,20 @@ namespace r1
 		// if STUDIOHDR_FLAGS_CONSTANT_DIRECTIONAL_LIGHT_DOT is set,
 		// this value is used to calculate directional components of lighting 
 		// on static props
-		char constdirectionallightdot;
+		uint8_t constdirectionallightdot;
 
 		// set during load of mdl data to track *desired* lod configuration (not actual)
 		// the *actual* clamped root lod is found in studiohwdata
 		// this is stored here as a global store to ensure the staged loading matches the rendering
-		char rootLOD;
+		uint8_t rootLOD;
 
 		// set in the mdl data to specify that lod configuration should only allow first numAllowRootLODs
 		// to be set as root LOD:
 		//	numAllowedRootLODs = 0	means no restriction, any lod can be set as root lod.
 		//	numAllowedRootLODs = N	means that lod0 - lod(N-1) can be set as root lod, but not lodN or lower.
-		char numAllowedRootLODs;
+		uint8_t numAllowedRootLODs;
 
-		char unused;
+		uint8_t unused;
 
 		float fadeDistance;	// set to -1 to never fade. set above 0 if you want it to fade out, distance is in feet.
 		// player/titan models seem to inherit this value from the first model loaded in menus.
@@ -481,8 +481,8 @@ namespace r1
 #pragma pack(pop)
 
 	// for everything r2 and before
-	void ExtractAnimValue(int frame, mstudioanimvalue_t* panimvalue, float scale, float& v1, float& v2);
-	void ExtractAnimValue(int frame, mstudioanimvalue_t* panimvalue, float scale, float& v1);
+	void ExtractAnimValue(int frame, const mstudioanimvalue_t* panimvalue, float scale, float& v1, float& v2);
+	void ExtractAnimValue(int frame, const mstudioanimvalue_t* panimvalue, float scale, float& v1);
 
 	bool Studio_AnimPosition(const animdesc_t* const panim, float flCycle, Vector& vecPos, QAngle& vecAngle);
 }

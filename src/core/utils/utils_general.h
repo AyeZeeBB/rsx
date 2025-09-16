@@ -41,6 +41,17 @@ FORCEINLINE const bool IsStringZeroLength(const char* const str)
 	return str[0] == '\0';
 }
 
+inline constexpr size_t strlen_ct(const char* str)
+{
+	size_t length = 0ull;
+	while (str[length] != '\0')
+	{
+		++length;
+	}
+
+	return length;
+}
+
 struct Color4
 {
 	Color4() = default;

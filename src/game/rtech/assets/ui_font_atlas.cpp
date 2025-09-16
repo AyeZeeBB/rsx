@@ -7,7 +7,6 @@
 #include <thirdparty/imgui/misc/imgui_utility.h>
 
 extern CDXParentHandler* g_dxHandler;
-
 extern ExportSettings_t g_ExportSettings;
 
 // ui font header
@@ -325,7 +324,6 @@ void LoadUIFontAtlasAsset(CAssetContainer* const pak, CAsset* const asset)
     pakAsset->setExtraData(fontAsset);
 }
 
-extern CDXParentHandler* g_dxHandler;
 void PostLoadUIFontAtlasAsset(CAssetContainer* const pak, CAsset* const asset)
 {
 	UNUSED(pak);
@@ -668,8 +666,7 @@ void* PreviewUIFontAtlasAsset(CAsset* const asset, const bool firstFrameForAsset
         ImGui::EndTable();
     }
 
-    const CTexture* const selectedUITxtr = selectedUITexture.get();
-    if (selectedUITxtr)
+    if (selectedUITexture.get())
     {
         const float aspectRatio = static_cast<float>(selectedUITexture->GetWidth()) / selectedUITexture->GetHeight();
 

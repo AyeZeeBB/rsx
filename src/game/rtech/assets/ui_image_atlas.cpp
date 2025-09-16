@@ -5,6 +5,7 @@
 #include <core/render/dx.h>
 #include <thirdparty/imgui/imgui.h>
 
+extern CDXParentHandler* g_dxHandler;
 extern ExportSettings_t g_ExportSettings;
 
 void LoadUIImageAtlasAsset(CAssetContainer* const pak, CAsset* const asset)
@@ -112,7 +113,6 @@ void LoadUIImageAtlasAsset(CAssetContainer* const pak, CAsset* const asset)
 	pakAsset->setExtraData(uiAsset);
 }
 
-extern CDXParentHandler* g_dxHandler;
 void PostLoadUIImageAtlasAsset(CAssetContainer* const pak, CAsset* const asset)
 {
     UNUSED(pak);
@@ -391,8 +391,7 @@ void* PreviewUIImageAtlasAsset(CAsset* const asset, const bool firstFrameForAsse
         ImGui::EndTable();
     }
 
-    const CTexture* const selectedUITxtr = selectedUITexture.get();
-    if (selectedUITxtr)
+    if (selectedUITexture.get())
     {
         const float aspectRatio = static_cast<float>(selectedUITexture->GetWidth()) / selectedUITexture->GetHeight();
 

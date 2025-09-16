@@ -53,7 +53,10 @@ void LoadAnimRigAsset(CAssetContainer* const pak, CAsset* const asset)
     case eMDLVersion::VERSION_12:
     {
         ParseModelBoneData_v8(arigAsset->GetParsedData());
+        ParseModelAttachmentData_v8(arigAsset->GetParsedData());
+        ParseModelHitboxData_v8(arigAsset->GetParsedData());
         ParseModelSequenceData_NoStall(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
+        ParseModelAnimTypes_V8(arigAsset->GetParsedData());
 
         break;
     }
@@ -69,7 +72,10 @@ void LoadAnimRigAsset(CAssetContainer* const pak, CAsset* const asset)
     case eMDLVersion::VERSION_15:
     {
         ParseModelBoneData_v12_1(arigAsset->GetParsedData());
+        ParseModelAttachmentData_v8(arigAsset->GetParsedData());
+        ParseModelHitboxData_v8(arigAsset->GetParsedData());
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
+        ParseModelAnimTypes_V8(arigAsset->GetParsedData());
 
         break;
     }
@@ -77,21 +83,30 @@ void LoadAnimRigAsset(CAssetContainer* const pak, CAsset* const asset)
     case eMDLVersion::VERSION_17:
     {
         ParseModelBoneData_v16(arigAsset->GetParsedData());
+        ParseModelAttachmentData_v16(arigAsset->GetParsedData());
+        ParseModelHitboxData_v16(arigAsset->GetParsedData());
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v16_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
+        ParseModelAnimTypes_V16(arigAsset->GetParsedData());
 
         break;
     }
     case eMDLVersion::VERSION_18:
     {
         ParseModelBoneData_v16(arigAsset->GetParsedData());
+        ParseModelAttachmentData_v16(arigAsset->GetParsedData());
+        ParseModelHitboxData_v16(arigAsset->GetParsedData());
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
+        ParseModelAnimTypes_V16(arigAsset->GetParsedData());
 
         break;
     }
     case eMDLVersion::VERSION_19:
     {
         ParseModelBoneData_v19(arigAsset->GetParsedData());
+        ParseModelAttachmentData_v16(arigAsset->GetParsedData());
+        ParseModelHitboxData_v16(arigAsset->GetParsedData());
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
+        ParseModelAnimTypes_V16(arigAsset->GetParsedData());
 
         break;
     }
@@ -237,7 +252,7 @@ bool ExportAnimRigAsset(CAsset* const asset, const int setting)
     }
     case eAnimRigExportSetting::ANIMRIG_SMD:
     {
-        return ExportModelSMD(parsedData, exportPath);
+        return ExportModelSMD(parsedData, exportPath) && ExportModelQC(parsedData, exportPath, setting, 54);
     }
     default:
     {

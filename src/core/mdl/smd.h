@@ -100,6 +100,8 @@ namespace smd
 			frames = new Frame[numFrames];
 		}
 
+		// still slow but a lot faster than the previous implementation (~5x faster)
+		const bool Write(char* const buffer, const size_t size) const;
 		void Write() const;
 
 	private:

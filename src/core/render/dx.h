@@ -2,6 +2,7 @@
 #include <d3d11.h>
 #include <core/render/dxshader.h>
 #include <DirectXMath.h>
+#include <dxgi.h>
 
 #include <core/math/vector.h>
 #include <core/math/matrix.h>
@@ -27,7 +28,8 @@ public:
     void CopySourceTextureSlice(CTexture* const src, const size_t x, const size_t y, const size_t w, const size_t h, const size_t offsetX, const size_t offsetY);
     void CopyRawToTexture(const char* const buf, const size_t bufSize);
     
-    inline ID3D11ShaderResourceView* const GetSRV() const { return m_shaderResourceView; };
+    //inline ID3D11ShaderResourceView* const GetSRV() const { return m_shaderResourceView; };
+    ID3D11ShaderResourceView* const GetSRV();
     inline void* const GetTexture() const { return m_texture; };
     inline const int GetWidth() const { return static_cast<int>(m_width); };
     inline const int GetHeight() const { return static_cast<int>(m_height); };
@@ -52,6 +54,7 @@ private:
 
     void* m_texture;
     ID3D11ShaderResourceView* m_shaderResourceView;
+    const ID3D11Device* m_currentDevice;
 };
 
 struct DXDrawDataTexture_t
@@ -284,7 +287,9 @@ public:
 
 	bool SetupDeviceD3D();
 	void CleanupD3D();
+
 	void HandleResize(const uint16_t x, const uint16_t y);
+	bool HandleWindowChange(HWND hWnd);
 
     std::shared_ptr<CTexture> CreateRenderTexture(const char* const buf, const size_t bufSize, const int width, const int height, const DXGI_FORMAT imgFormat, const size_t arraySize, const size_t mipLevels);
 
@@ -311,6 +316,16 @@ public:
     inline ID3D11SamplerState* GetSamplerState() const { return m_pSamplerState; };
     inline ID3D11SamplerState* GetSamplerComparisonState() const { return m_pSamplerCmpState; };
 
+    inline const uint32_t GetActiveMonitor() const { return m_activeMonitor; }
+    // returns true if the monitors have a shared adapter
+    inline bool MonitorHasSameAdapter(const uint32_t mon0, const uint32_t mon1) const
+    {
+        assertm(mon0 < m_numMonitors, "monitor 0 was out of range");
+        assertm(mon1 < m_numMonitors, "monitor 1 was out of range");
+
+        return m_pMonitors[mon0].m_pAdapter == m_pMonitors[mon1].m_pAdapter;
+    };
+
     inline const XMMATRIX& GetProjMatrix() { return m_wndProjMatrix; };
 
     inline CDXShaderManager* GetShaderManager() const { return m_pShaderManager; };
@@ -327,6 +342,12 @@ private:
 
     bool CreateMisc();
 
+    bool SetupAdapters();
+    bool SetupMonitors();
+    bool MonitorExists(HMONITOR hmonitor, size_t& index);
+    bool SetActiveMonitor();
+    bool SetupSwapchain();
+
 	HWND m_windowHandle;
 
 	ID3D11Device* m_pDevice;
@@ -338,6 +359,20 @@ private:
     ID3D11RasterizerState* m_pRasterizerState; // main rasterizer state
     ID3D11SamplerState* m_pSamplerState;
     ID3D11SamplerState* m_pSamplerCmpState; // sampler comparison state because obviously we need this?
+
+    struct MonitorAdapter_t
+    {
+        MonitorAdapter_t() : m_pAdapter(nullptr), m_pMonitor(nullptr) {};
+
+        IDXGIAdapter1* m_pAdapter;
+        HMONITOR m_pMonitor;
+    };
+
+    IDXGIAdapter1** m_ppAdapters;
+    size_t m_numAdapters;
+    MonitorAdapter_t* m_pMonitors;
+    uint32_t m_numMonitors;
+    uint32_t m_activeMonitor;
 
     XMMATRIX m_wndProjMatrix;
 

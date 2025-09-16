@@ -24,7 +24,8 @@
 #include <core/utils/fileio.h>
 #include <core/utils/thread.h>
 #include <core/utils/ramen.h>
-#include <core/utils/exportsettings.h>
+
+#define STREAMIO
 
 #define MATH_ASSERTS 1
 #define MATH_SIMD 1
@@ -86,8 +87,9 @@
     #define assertm(exp, msg) UNUSED(exp);
 #endif // #ifdef ASSERTS
 
-// uses assertm
+// [rika]: uses some of the above defines
 #include <core/utils/buffermanager.h>
+#include <core/utils/exportsettings.h>
 
 #define PAKLOAD_DEBUG_VERBOSE 2
 #define PAKLOAD_DEBUG PAKLOAD_DEBUG_LOG

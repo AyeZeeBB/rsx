@@ -1,40 +1,12 @@
 #pragma once
 
-#include <d3d11.h>
-#include <game/rtech/utils/utils.h>
+#include <core/render/dx.h>
 
-inline bool CreateD3DBuffer(
+bool CreateD3DBuffer(
     ID3D11Device* device, ID3D11Buffer** pBuffer,
     UINT byteWidth, D3D11_USAGE usage,
     D3D11_BIND_FLAG bindFlags, int cpuAccessFlags,
-    UINT miscFlags, UINT structureByteStride = 0, void* initialData = nullptr)
-{
-    assert(pBuffer);
-
-    D3D11_BUFFER_DESC desc = {};
-
-    desc.Usage = usage;
-    desc.ByteWidth = bindFlags & D3D11_BIND_CONSTANT_BUFFER ? IALIGN(byteWidth, 16) : byteWidth;
-    desc.BindFlags = bindFlags;
-    desc.CPUAccessFlags = cpuAccessFlags;
-    desc.MiscFlags = miscFlags;
-    desc.StructureByteStride = structureByteStride;
-
-    HRESULT hr;
-    if (initialData)
-    {
-        D3D11_SUBRESOURCE_DATA resource = { initialData };
-        hr = device->CreateBuffer(&desc, &resource, pBuffer);
-    }
-    else
-    {
-        hr = device->CreateBuffer(&desc, NULL, pBuffer);
-    }
-
-    assert(SUCCEEDED(hr));
-
-    return SUCCEEDED(hr);
-}
+    UINT miscFlags, UINT structureByteStride = 0, void* initialData = nullptr);
 
 static const char* D3D11_BLEND_NAMES[] = {
     "D3D11_BLEND_INVALID",
@@ -64,4 +36,29 @@ static const char* D3D11_BLEND_OP_NAMES[] = {
     "D3D11_BLEND_OP_REV_SUBTRACT",
     "D3D11_BLEND_OP_MIN",
     "D3D11_BLEND_OP_MAX",
+};
+
+class CDXDrawData;
+class CPreviewDrawData
+{
+public:
+    CPreviewDrawData() : drawData(nullptr), guid(0ull), activeMonitor(0u), activeLODLevel(0u) {}
+    ~CPreviewDrawData();
+
+    CDXDrawData* drawData;
+    uint64_t guid;
+    uint32_t activeMonitor;
+    uint8_t activeLODLevel;
+
+    inline void FreeDrawData();
+    bool CheckForMonitorChange();
+
+    inline void UpdateAssetInfo(CDXDrawData* const assetDrawData, const uint64_t assetGUID, const uint8_t assetLOD)
+    {
+        drawData = assetDrawData;
+        guid = assetGUID;
+        activeLODLevel = assetLOD;
+    }
+
+    CDXDrawData* const GetDrawData() const { return drawData; }
 };

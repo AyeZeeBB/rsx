@@ -1,19 +1,30 @@
 #pragma once
 
-// bleh
 struct ExportSettings_t
 {
-    int previewedSkinIndex;
-
+    // texture
     uint32_t exportNormalRecalcSetting;
     uint32_t exportTextureNameSetting;
 
-    bool exportPathsFull;
-    bool exportAssetDeps;
-    bool exportRigSequences;
-    bool exportModelSkin; 
     bool exportMaterialTextures;
 
+    // misc
+    bool exportPathsFull;
+    bool exportAssetDeps;
+
+    // model settings
+    uint32_t previewedSkinIndex;
+    
+    // what qc version to target
+    uint16_t qcMajorVersion;
+    uint16_t qcMinorVersion;
+
+    bool exportRigSequences;        // export sequences with a model or rig
+    bool exportModelSkin;           // export the selected skin for a model
+    bool exportModelMatsTruncated;  // truncate material names in model files
+    bool _unusedPadModel;
+
+    // model physics settings
     uint32_t exportPhysicsContentsFilter;
     bool exportPhysicsFilterExclusive;
     bool exportPhysicsFilterAND;

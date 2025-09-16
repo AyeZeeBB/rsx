@@ -115,6 +115,8 @@ public:
     CShader* LoadShader(const std::string& path, eShaderType type, bool useDefaultInputLayout = true);
     CShader* LoadShaderFromString(const std::string& path, const std::string& sourceString, eShaderType type, bool useDefaultInputLayout = true);
 
+    void Explode() { m_shaders.clear(); }
+
 private:
     CShader* GetShaderByPath(const std::string& path);
 

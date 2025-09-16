@@ -21,12 +21,12 @@ static bool ExportLcdScreenEffectAsset(CAsset* const asset, const int setting)
         rlcd.pixelScaleY = hdr->pixelScaleY;
         rlcd.brightness = hdr->brightness;
         rlcd.contrast = hdr->contrast;
-        rlcd.waveScale = hdr->waveScale;
         rlcd.waveOffset = hdr->waveOffset;
+        rlcd.waveScale = hdr->waveScale;
         rlcd.waveSpeed = hdr->waveSpeed;
         rlcd.wavePeriod = hdr->wavePeriod;
         rlcd.bloomAdd = hdr->bloomAdd;
-        rlcd.reserved = hdr->reserved;
+        rlcd.doBloomLuminance = hdr->doBloomLuminance;
         rlcd.pixelFlicker = hdr->pixelFlicker;
 
         set = true;
@@ -67,12 +67,12 @@ static bool ExportLcdScreenEffectAsset(CAsset* const asset, const int setting)
     outBuf.append(std::format("\t\"pixelScaleY\": {:f},\n", rlcd.pixelScaleY));
     outBuf.append(std::format("\t\"brightness\": {:f},\n", rlcd.brightness));
     outBuf.append(std::format("\t\"contrast\": {:f},\n", rlcd.contrast));
-    outBuf.append(std::format("\t\"waveScale\": {:f},\n", rlcd.waveScale));
     outBuf.append(std::format("\t\"waveOffset\": {:f},\n", rlcd.waveOffset));
+    outBuf.append(std::format("\t\"waveScale\": {:f},\n", rlcd.waveScale));
     outBuf.append(std::format("\t\"waveSpeed\": {:f},\n", rlcd.waveSpeed));
     outBuf.append(std::format("\t\"wavePeriod\": {:f},\n", rlcd.wavePeriod));
     outBuf.append(std::format("\t\"bloomAdd\": {:f},\n", rlcd.bloomAdd));
-    outBuf.append(std::format("\t\"reserved\": {:d},\n", rlcd.reserved));
+    outBuf.append(std::format("\t\"doBloomLuminance\": {:s},\n", rlcd.doBloomLuminance ? "true" : "false"));
     outBuf.append(std::format("\t\"pixelFlicker\": {:f}\n}}", rlcd.pixelFlicker));
 
     out.write(outBuf.data(), outBuf.size());

@@ -14,16 +14,14 @@
 
 #include <immintrin.h>
 
-extern CDXParentHandler* g_dxHandler;
 extern CBufferManager g_BufferManager;
 extern ExportSettings_t g_ExportSettings;
 
 static void ParseModelVertexData_v8(CPakAsset* const asset, ModelAsset* const modelAsset)
 {
     UNUSED(asset);
-    char* const pDataBuffer = modelAsset->vertDataPermanent;
 
-    if (!pDataBuffer)
+    if (!modelAsset->vertexComponentData)
     {
         Log("%s loaded with no vertex data\n", modelAsset->name);
         return;
@@ -180,6 +178,7 @@ static void ParseModelVertexData_v8(CPakAsset* const asset, ModelAsset* const mo
 
                     lodMeshCount++;
                     modelData.meshCount++;
+                    modelData.vertCount += meshData.vertCount;
 
                     // for export
                     lodData.weightsPerVert = meshData.weightsPerVert > lodData.weightsPerVert ? meshData.weightsPerVert : lodData.weightsPerVert;
@@ -219,8 +218,8 @@ const uint8_t s_VertexDataBaseBoneMap[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 
 static void ParseModelVertexData_v9(CPakAsset* const asset, ModelAsset* const modelAsset)
 {
-    const std::unique_ptr<char[]> pStreamed = modelAsset->vertDataStreamed.size > 0 ? asset->getStarPakData(modelAsset->vertDataStreamed.offset, modelAsset->vertDataStreamed.size, false) : nullptr; // probably smarter to check the size inside getStarPakData but whatever!
-    char* const pDataBuffer = pStreamed.get() ? pStreamed.get() : modelAsset->vertDataPermanent;
+    const std::unique_ptr<char[]> pStreamed = modelAsset->vertexStreamingData.size > 0 ? asset->getStarPakData(modelAsset->vertexStreamingData.offset, modelAsset->vertexStreamingData.size, false) : nullptr; // probably smarter to check the size inside getStarPakData but whatever!
+    char* const pDataBuffer = pStreamed.get() ? pStreamed.get() : modelAsset->staticStreamingData;
 
     if (!pDataBuffer)
     {
@@ -350,6 +349,7 @@ static void ParseModelVertexData_v9(CPakAsset* const asset, ModelAsset* const mo
 
                     lodMeshCount++;
                     modelData.meshCount++;
+                    modelData.vertCount += meshData.vertCount;
 
                     // for export
                     lodData.weightsPerVert = meshData.weightsPerVert > lodData.weightsPerVert ? meshData.weightsPerVert : lodData.weightsPerVert;
@@ -378,8 +378,8 @@ static void ParseModelVertexData_v9(CPakAsset* const asset, ModelAsset* const mo
 
 static void ParseModelVertexData_v12_1(CPakAsset* const asset, ModelAsset* const modelAsset)
 {
-    const std::unique_ptr<char[]> pStreamed = asset->getStarPakData(modelAsset->vertDataStreamed.offset, modelAsset->vertDataStreamed.size, false);
-    char* const pDataBuffer = pStreamed.get();
+    const std::unique_ptr<char[]> pStreamed = modelAsset->vertexStreamingData.size > 0 ? asset->getStarPakData(modelAsset->vertexStreamingData.offset, modelAsset->vertexStreamingData.size, false) : nullptr; // probably smarter to check the size inside getStarPakData but whatever!
+    char* const pDataBuffer = pStreamed.get() ? pStreamed.get() : modelAsset->staticStreamingData;
 
     if (!pDataBuffer)
     {
@@ -507,6 +507,7 @@ static void ParseModelVertexData_v12_1(CPakAsset* const asset, ModelAsset* const
 
                         lodMeshCount[lodLevel]++;
                         modelData.meshCount++;
+                        modelData.vertCount += meshData.vertCount;
 
                         // for export
                         lodData.weightsPerVert = meshData.weightsPerVert > lodData.weightsPerVert ? meshData.weightsPerVert : lodData.weightsPerVert;
@@ -539,8 +540,8 @@ static void ParseModelVertexData_v12_1(CPakAsset* const asset, ModelAsset* const
 
 static void ParseModelVertexData_v14(CPakAsset* const asset, ModelAsset* const modelAsset)
 {
-    const std::unique_ptr<char[]> pStreamed = asset->getStarPakData(modelAsset->vertDataStreamed.offset, modelAsset->vertDataStreamed.size, false);
-    char* const pDataBuffer = pStreamed.get();
+    const std::unique_ptr<char[]> pStreamed = modelAsset->vertexStreamingData.size > 0 ? asset->getStarPakData(modelAsset->vertexStreamingData.offset, modelAsset->vertexStreamingData.size, false) : nullptr; // probably smarter to check the size inside getStarPakData but whatever!
+    char* const pDataBuffer = pStreamed.get() ? pStreamed.get() : modelAsset->staticStreamingData;
 
     if (!pDataBuffer)
     {
@@ -610,7 +611,7 @@ static void ParseModelVertexData_v14(CPakAsset* const asset, ModelAsset* const m
                         if (meshIdx == pModel->meshCountBase)
                             break;
 
-                        const r5::mstudiomesh_v12_1_t* const pMesh = pModel->pMesh(meshIdx);
+                        const r5::mstudiomesh_v14_t* const pMesh = pModel->pMesh(meshIdx);
                         const vg::rev3::MeshHeader_t* const mesh = lod->pMesh(static_cast<uint8_t>(pMesh->meshid));
 
                         if (mesh->flags == 0)
@@ -669,6 +670,7 @@ static void ParseModelVertexData_v14(CPakAsset* const asset, ModelAsset* const m
 
                         lodMeshCount[lodLevel]++;
                         modelData.meshCount++;
+                        modelData.vertCount += meshData.vertCount;
 
                         // for export
                         lodData.weightsPerVert = meshData.weightsPerVert > lodData.weightsPerVert ? meshData.weightsPerVert : lodData.weightsPerVert;
@@ -701,8 +703,8 @@ static void ParseModelVertexData_v14(CPakAsset* const asset, ModelAsset* const m
 
 static void ParseModelVertexData_v16(CPakAsset* const asset, ModelAsset* const modelAsset)
 {
-    const std::unique_ptr<char[]> pStreamed = asset->getStarPakData(modelAsset->vertDataStreamed.offset, modelAsset->vertDataStreamed.size, false);
-    char* const pDataBuffer = pStreamed.get();
+    const std::unique_ptr<char[]> pStreamed = modelAsset->vertexStreamingData.size > 0 ? asset->getStarPakData(modelAsset->vertexStreamingData.offset, modelAsset->vertexStreamingData.size, false) : nullptr; // probably smarter to check the size inside getStarPakData but whatever!
+    char* const pDataBuffer = pStreamed.get() ? pStreamed.get() : modelAsset->staticStreamingData;
 
     if (!pDataBuffer)
     {
@@ -858,6 +860,7 @@ static void ParseModelVertexData_v16(CPakAsset* const asset, ModelAsset* const m
 
                         lodMeshCount[lodLevel]++;
                         modelData.meshCount++;
+                        modelData.vertCount += meshData.vertCount;
 
                         // for export
                         lodData.weightsPerVert = meshData.weightsPerVert > lodData.weightsPerVert ? meshData.weightsPerVert : lodData.weightsPerVert;
@@ -901,10 +904,10 @@ static void ParseModelTextureData_v8(ModelParsedData_t* const parsedData)
         const r5::mstudiotexture_v8_t* const texture = &pTextures[i];
 
         // if guid is 0, the material is a VMT
-        if (texture->guid != 0)
-            matlData.asset = g_assetData.FindAssetByGUID<CPakAsset>(texture->guid);
+        if (texture->texture != 0)
+            matlData.asset = g_assetData.FindAssetByGUID<CPakAsset>(texture->texture);
 
-        matlData.guid = texture->guid;
+        matlData.guid = texture->texture;
         matlData.SetName(texture->pszName());
     }
 
@@ -960,9 +963,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
 
         ParseModelBoneData_v8(mdlAsset->GetParsedData());
         ParseModelAttachmentData_v8(mdlAsset->GetParsedData());
+        ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v8(pakAsset, mdlAsset);
         ParseModelSequenceData_NoStall(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
+        ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
     case eMDLVersion::VERSION_9:
@@ -975,9 +980,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
 
         ParseModelBoneData_v8(mdlAsset->GetParsedData());
         ParseModelAttachmentData_v8(mdlAsset->GetParsedData());
+        ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v9(pakAsset, mdlAsset);
         ParseModelSequenceData_NoStall(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
+        ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
     case eMDLVersion::VERSION_12_1: // has to have its own vertex func
@@ -991,9 +998,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
 
         ParseModelBoneData_v12_1(mdlAsset->GetParsedData());
         ParseModelAttachmentData_v8(mdlAsset->GetParsedData());
+        ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v12_1(pakAsset, mdlAsset);
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
+        ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
     case eMDLVersion::VERSION_13:
@@ -1004,9 +1013,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
 
         ParseModelBoneData_v12_1(mdlAsset->GetParsedData());
         ParseModelAttachmentData_v8(mdlAsset->GetParsedData());
+        ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v12_1(pakAsset, mdlAsset);
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
+        ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
     case eMDLVersion::VERSION_14:
@@ -1018,9 +1029,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
 
         ParseModelBoneData_v12_1(mdlAsset->GetParsedData());
         ParseModelAttachmentData_v8(mdlAsset->GetParsedData());
+        ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v14(pakAsset, mdlAsset);
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
+        ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
     case eMDLVersion::VERSION_16:
@@ -1032,9 +1045,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
 
         ParseModelBoneData_v16(mdlAsset->GetParsedData());
         ParseModelAttachmentData_v16(mdlAsset->GetParsedData());
+        ParseModelHitboxData_v16(mdlAsset->GetParsedData());
         ParseModelTextureData_v16(mdlAsset->GetParsedData());
         ParseModelVertexData_v16(pakAsset, mdlAsset);
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v16_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
+        ParseModelAnimTypes_V16(mdlAsset->GetParsedData());
         break;
     }
     case eMDLVersion::VERSION_18:
@@ -1045,9 +1060,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
 
         ParseModelBoneData_v16(mdlAsset->GetParsedData());
         ParseModelAttachmentData_v16(mdlAsset->GetParsedData());
+        ParseModelHitboxData_v16(mdlAsset->GetParsedData());
         ParseModelTextureData_v16(mdlAsset->GetParsedData());
         ParseModelVertexData_v16(pakAsset, mdlAsset);
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
+        ParseModelAnimTypes_V16(mdlAsset->GetParsedData());
         break;
     }
     case eMDLVersion::VERSION_19:
@@ -1058,9 +1075,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
 
         ParseModelBoneData_v19(mdlAsset->GetParsedData());
         ParseModelAttachmentData_v16(mdlAsset->GetParsedData());
+        ParseModelHitboxData_v16(mdlAsset->GetParsedData());
         ParseModelTextureData_v16(mdlAsset->GetParsedData());
         ParseModelVertexData_v16(pakAsset, mdlAsset);
         ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
+        ParseModelAnimTypes_V16(mdlAsset->GetParsedData());
         break;
     }
     default:
@@ -1125,14 +1144,15 @@ void PostLoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
 
     CPakAsset* const pakAsset = static_cast<CPakAsset*>(asset);
 
-    ModelAsset* const mdlAsset = reinterpret_cast<ModelAsset*>(pakAsset->extraData());
-    if (!mdlAsset)
+    ModelAsset* const modelAsset = reinterpret_cast<ModelAsset*>(pakAsset->extraData());
+    assertm(modelAsset, "Extra data should be valid at this point.");
+    if (!modelAsset)
         return;
 
     // parse sequences for children
-    const uint64_t* guids = reinterpret_cast<const uint64_t*>(mdlAsset->animSeqs);
+    const uint64_t* guids = reinterpret_cast<const uint64_t*>(modelAsset->animSeqs);
 
-    for (uint16_t seqIdx = 0; seqIdx < mdlAsset->numAnimSeqs; seqIdx++)
+    for (uint16_t seqIdx = 0; seqIdx < modelAsset->numAnimSeqs; seqIdx++)
     {
         const uint64_t guid = guids[seqIdx];
 
@@ -1146,92 +1166,50 @@ void PostLoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         if (nullptr == animSeq)
             continue;
 
-        animSeq->parentModel = !animSeq->parentModel ? mdlAsset : animSeq->parentModel;
+        animSeq->parentModel = !animSeq->parentModel ? modelAsset : animSeq->parentModel;
     }
-
-    // draw data
-    ModelParsedData_t* const parsedData = mdlAsset->GetParsedData();
-
-    if (parsedData->lods.empty())
-        return;
-
-    const size_t lodLevel = 0;
-
-    if (!mdlAsset->drawData)
-    {
-        mdlAsset->drawData = new CDXDrawData();
-        mdlAsset->drawData->meshBuffers.resize(parsedData->lods.at(lodLevel).meshes.size());
-        mdlAsset->drawData->modelName = mdlAsset->name;
-    }
-
-    ParseModelDrawData(mdlAsset->GetParsedData(), mdlAsset->drawData, lodLevel);
 }
 
-static bool ExportRawModelAsset(const ModelAsset* const modelAsset, std::filesystem::path& exportPath, const char* const streamedData)
+void* PreviewModelAsset(CAsset* const asset, const bool firstFrameForAsset)
 {
-    // Is asset permanent or streamed?
-    const char* const pDataBuffer = streamedData ? streamedData : modelAsset->vertDataPermanent;
+    CPakAsset* const pakAsset = static_cast<CPakAsset*>(asset);
+    assertm(pakAsset, "Asset should be valid.");
 
-    const studiohdr_generic_t& studiohdr = modelAsset->StudioHdr();
+    ModelAsset* const modelAsset = reinterpret_cast<ModelAsset*>(pakAsset->extraData());
+    assertm(modelAsset, "Extra data should be valid at this point.");
 
-    StreamIO studioOut(exportPath.string(), eStreamIOMode::Write);
-    studioOut.write(reinterpret_cast<char*>(modelAsset->data), studiohdr.length);
+    ModelParsedData_t* const parsedData = modelAsset->GetParsedData();
 
-    if (studiohdr.phySize > 0)
+    static ModelPreviewInfo_t previewInfo;
+
+    if (firstFrameForAsset)
     {
-        exportPath.replace_extension(".phy");
+        previewInfo.bodygroupModelSelected.clear();
 
-        // if we error here something is broken with setting up the model asset
-        StreamIO physOut(exportPath.string(), eStreamIOMode::Write);
-        physOut.write(reinterpret_cast<char*>(modelAsset->physics), studiohdr.phySize);
+        previewInfo.bodygroupModelSelected.resize(parsedData->bodyParts.size(), 0ull);
+
+        previewInfo.selectedBodypartIndex = previewInfo.selectedBodypartIndex > parsedData->bodyParts.size() ? 0 : previewInfo.selectedBodypartIndex;
+        previewInfo.selectedSkinIndex = previewInfo.selectedSkinIndex > parsedData->skins.size() ? 0 : previewInfo.selectedSkinIndex;
+
+        // [rika]: lod handling
+        assertm(parsedData->lods.size(), "no lods in preview?");
+        previewInfo.maxLODIndex = static_cast<uint8_t>(parsedData->lods.size()) - 1;
+        previewInfo.selectedLODLevel = previewInfo.selectedLODLevel > previewInfo.maxLODIndex ? previewInfo.maxLODIndex : previewInfo.selectedLODLevel; // clamp it
     }
 
-    // make a manifest of this assets dependencies
-    exportPath.replace_extension(".rson");
+    ImGui::Text("Rigs: %i", modelAsset->numAnimRigs);
+    ImGui::Text("Sequences: %i", modelAsset->numAnimSeqs);
 
-    StreamIO depOut(exportPath.string(), eStreamIOMode::Write);
-    WriteRSONDependencyArray(*depOut.W(), "rigs", modelAsset->animRigs, modelAsset->numAnimRigs);
-    WriteRSONDependencyArray(*depOut.W(), "seqs", modelAsset->animSeqs, modelAsset->numAnimSeqs);
-    depOut.close();
+    return PreviewParsedData(&previewInfo, parsedData, modelAsset->name, asset->GetAssetGUID(), firstFrameForAsset);
+}
 
-    // [rika]: should we export both starpak and rpak data?
+static bool ExportModelStreamedData(const ModelAsset* const modelAsset, std::filesystem::path& exportPath, const char* const streamedData, const char* const extension)
+{
+    const studiohdr_generic_t* const pStudioHdr = modelAsset->pStudioHdr();
+
     switch (modelAsset->version)
     {
     case eMDLVersion::VERSION_8:
-    {
-        // vvd
-        exportPath.replace_extension(".vvd");
-
-        StreamIO vertOut(exportPath.string(), eStreamIOMode::Write);
-        vertOut.write(pDataBuffer + studiohdr.vvdOffset, studiohdr.vvdSize);
-
-        // vvc
-        if (studiohdr.vvcSize)
-        {
-            exportPath.replace_extension(".vvc");
-
-            StreamIO vertColorOut(exportPath.string(), eStreamIOMode::Write);
-            vertColorOut.write(pDataBuffer + studiohdr.vvcOffset, studiohdr.vvcSize);
-        }
-
-        // vvw
-        if (studiohdr.vvwSize)
-        {
-            exportPath.replace_extension(".vvw");
-
-            StreamIO vertWeightOut(exportPath.string(), eStreamIOMode::Write);
-            vertWeightOut.write(pDataBuffer + studiohdr.vvwOffset, studiohdr.vvwSize);
-        }
-
-        // vtx
-        exportPath.replace_extension(".dx11.vtx"); // cope
-
-        // 'opt' being optimized
-        StreamIO vertOptOut(exportPath.string(), eStreamIOMode::Write);
-        vertOptOut.write(pDataBuffer, studiohdr.vtxSize); // [rika]: 
-
-        return true;
-    }
     case eMDLVersion::VERSION_9:
     case eMDLVersion::VERSION_10:
     case eMDLVersion::VERSION_11:
@@ -1248,10 +1226,10 @@ static bool ExportRawModelAsset(const ModelAsset* const modelAsset, std::filesys
     case eMDLVersion::VERSION_15:
     {
         // [rika]: .hwData would be better but this is set in stone at this point essentially
-        exportPath.replace_extension(".vg");
+        exportPath.replace_extension(extension);
 
         StreamIO hwOut(exportPath.string(), eStreamIOMode::Write);
-        hwOut.write(pDataBuffer, studiohdr.hwDataSize);
+        hwOut.write(streamedData, pStudioHdr->hwDataSize);
 
         return true;
     }
@@ -1261,20 +1239,20 @@ static bool ExportRawModelAsset(const ModelAsset* const modelAsset, std::filesys
     case eMDLVersion::VERSION_19:
     {
         // special case because of compression
-        exportPath.replace_extension(".vg");
+        exportPath.replace_extension(extension);
 
-        std::unique_ptr<char[]> hwBufTmp = std::make_unique<char[]>(studiohdr.hwDataSize);
+        std::unique_ptr<char[]> hwBufTmp = std::make_unique<char[]>(pStudioHdr->hwDataSize);
         char* pPos = hwBufTmp.get(); // position in the decompressed buffer for writing
 
-        for (int i = 0; i < studiohdr.groupCount; i++)
+        for (int i = 0; i < pStudioHdr->groupCount; i++)
         {
-            const studio_hw_groupdata_t& group = studiohdr.groups[i];
+            const studio_hw_groupdata_t& group = pStudioHdr->groups[i];
 
             switch (group.dataCompression)
             {
             case eCompressionType::NONE:
             {
-                memcpy_s(pPos, group.dataSizeDecompressed, pDataBuffer + group.dataOffset, group.dataSizeDecompressed);
+                memcpy_s(pPos, group.dataSizeDecompressed, streamedData + group.dataOffset, group.dataSizeDecompressed);
                 break;
             }
             case eCompressionType::PAKFILE:
@@ -1283,7 +1261,7 @@ static bool ExportRawModelAsset(const ModelAsset* const modelAsset, std::filesys
             {
                 std::unique_ptr<char[]> dcmpBuf = std::make_unique<char[]>(group.dataSizeCompressed);
 
-                memcpy_s(dcmpBuf.get(), group.dataSizeCompressed, pDataBuffer + group.dataOffset, group.dataSizeCompressed);
+                memcpy_s(dcmpBuf.get(), group.dataSizeCompressed, streamedData + group.dataOffset, group.dataSizeCompressed);
 
                 size_t dataSizeDecompressed = group.dataSizeDecompressed;
                 dcmpBuf = RTech::DecompressStreamedBuffer(std::move(dcmpBuf), dataSizeDecompressed, group.dataCompression);
@@ -1300,7 +1278,7 @@ static bool ExportRawModelAsset(const ModelAsset* const modelAsset, std::filesys
         }
 
         StreamIO hwOut(exportPath.string(), eStreamIOMode::Write);
-        hwOut.write(hwBufTmp.get(), studiohdr.hwDataSize);
+        hwOut.write(hwBufTmp.get(), pStudioHdr->hwDataSize);
 
         return true;
     }
@@ -1308,8 +1286,91 @@ static bool ExportRawModelAsset(const ModelAsset* const modelAsset, std::filesys
         assertm(false, "Asset version not handled.");
         return false;
     }
+}
 
-    unreachable();
+static bool ExportRawModelAsset(const ModelAsset* const modelAsset, std::filesystem::path& exportPath, const char* const streamedData)
+{
+    // Is asset permanent or streamed?
+    //const char* const pDataBuffer = streamedData ? streamedData : modelAsset->staticStreamingData;
+
+    const studiohdr_generic_t* const pStudioHdr = modelAsset->pStudioHdr();
+
+    StreamIO studioOut(exportPath.string(), eStreamIOMode::Write);
+    studioOut.write(reinterpret_cast<char*>(modelAsset->data), pStudioHdr->length);
+
+    if (pStudioHdr->phySize > 0)
+    {
+        exportPath.replace_extension(".phy");
+
+        // if we error here something is broken with setting up the model asset
+        StreamIO physOut(exportPath.string(), eStreamIOMode::Write);
+        physOut.write(reinterpret_cast<char*>(modelAsset->physics), pStudioHdr->phySize);
+    }
+
+    // make a manifest of this assets dependencies
+    exportPath.replace_extension(".rson");
+
+    StreamIO depOut(exportPath.string(), eStreamIOMode::Write);
+    WriteRSONDependencyArray(*depOut.W(), "rigs", modelAsset->animRigs, modelAsset->numAnimRigs);
+    WriteRSONDependencyArray(*depOut.W(), "seqs", modelAsset->animSeqs, modelAsset->numAnimSeqs);
+    depOut.close();
+
+    // static (prop) streamed data
+    if (modelAsset->staticStreamingData && modelAsset->streamingDataSize)
+    {
+        if (!ExportModelStreamedData(modelAsset, exportPath, modelAsset->staticStreamingData, ".vg_static"))
+            return false;
+    }
+
+    // starpak streamed data
+    if (streamedData && modelAsset->streamingDataSize)
+    {
+        if (!ExportModelStreamedData(modelAsset, exportPath, streamedData, ".vg"))
+            return false;
+    }
+
+    // export the vertex components
+    if (modelAsset->componentDataSize && modelAsset->vertexComponentData)
+    {
+        // vvd
+        if (pStudioHdr->vvdSize)
+        {
+            exportPath.replace_extension(".vvd");
+
+            StreamIO vertOut(exportPath.string(), eStreamIOMode::Write);
+            vertOut.write(modelAsset->vertexComponentData + pStudioHdr->vvdOffset, pStudioHdr->vvdSize);
+        }
+
+        // vvc
+        if (pStudioHdr->vvcSize > 0)
+        {
+            exportPath.replace_extension(".vvc");
+
+            StreamIO vertColorOut(exportPath.string(), eStreamIOMode::Write);
+            vertColorOut.write(modelAsset->vertexComponentData + pStudioHdr->vvcOffset, pStudioHdr->vvcSize);
+        }
+
+        // vvw
+        if (pStudioHdr->vvwSize > 0)
+        {
+            exportPath.replace_extension(".vvw");
+
+            StreamIO vertWeightOut(exportPath.string(), eStreamIOMode::Write);
+            vertWeightOut.write(modelAsset->vertexComponentData + pStudioHdr->vvwOffset, pStudioHdr->vvwSize);
+        }
+
+        // vtx
+        if (pStudioHdr->vtxSize > 0)
+        {
+            exportPath.replace_extension(".dx11.vtx"); // cope
+
+            // 'opt' being optimized
+            StreamIO vertOptOut(exportPath.string(), eStreamIOMode::Write);
+            vertOptOut.write(modelAsset->vertexComponentData + pStudioHdr->vtxOffset, pStudioHdr->vtxSize); // [rika]: 
+        }
+    }
+
+    return true;
 }
 
 template <typename phyheader_t>
@@ -1445,7 +1506,7 @@ bool ExportModelAsset(CAsset* const asset, const int setting)
     if (!modelAsset)
         return false;
 
-    std::unique_ptr<char[]> streamedData = pakAsset->getStarPakData(modelAsset->vertDataStreamed.offset, modelAsset->vertDataStreamed.size, false);
+    std::unique_ptr<char[]> streamedData = pakAsset->getStarPakData(modelAsset->vertexStreamingData.offset, modelAsset->vertexStreamingData.size, false);
 
     assertm(modelAsset->name, "No name for model.");
 
@@ -1516,7 +1577,7 @@ bool ExportModelAsset(CAsset* const asset, const int setting)
         }
         case eModelExportSetting::MODEL_SMD:
         {
-            return ExportModelSMD(parsedData, exportPath);
+            return ExportModelSMD(parsedData, exportPath) && ExportModelQC(parsedData, exportPath, setting, 54);
         }
         case eModelExportSetting::MODEL_STL_VALVE_PHYSICS:
         {
@@ -1531,7 +1592,7 @@ bool ExportModelAsset(CAsset* const asset, const int setting)
             // more or less identical to the vphysics one. The polygon winding
             // order of the vphysics replica is however always inverted.
             if (modelAsset->version >= eMDLVersion::VERSION_12_1)
-                return ExportPhysicsModelBVH<r5::mstudiocollmodel_v8_t, r5::mstudiocollheader_v12_1_t>(modelAsset, exportPath);
+                return ExportPhysicsModelBVH<r5::mstudiocollmodel_v8_t, r5::mstudiocollheader_v12_t>(modelAsset, exportPath);
             else
                 return ExportPhysicsModelBVH<r5::mstudiocollmodel_v8_t, r5::mstudiocollheader_v8_t>(modelAsset, exportPath);
         }
@@ -1543,353 +1604,6 @@ bool ExportModelAsset(CAsset* const asset, const int setting)
     }
 
     unreachable();
-}
-
-void* PreviewModelAsset(CAsset* const asset, const bool firstFrameForAsset)
-{
-    CPakAsset* const pakAsset = static_cast<CPakAsset*>(asset);
-    assertm(pakAsset, "Asset should be valid.");
-
-    ModelAsset* const modelAsset = reinterpret_cast<ModelAsset*>(pakAsset->extraData());
-    assertm(modelAsset, "Extra data should be valid at this point.");
-    if (!modelAsset)
-        return nullptr;
-
-    CDXDrawData* const drawData = modelAsset->drawData;
-    if (!drawData)
-        return nullptr;
-
-    drawData->vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_vs", s_PreviewVertexShader, eShaderType::Vertex);;
-    drawData->pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_ps", s_PreviewPixelShader, eShaderType::Pixel);
-
-    ModelParsedData_t* const parsedData = &modelAsset->parsedData;
-
-    static std::vector<size_t> bodygroupModelSelected;
-    static size_t lastSelectedBodypartIndex = 0;
-    static size_t selectedBodypartIndex = 0;
-
-    static size_t selectedSkinIndex = 0;
-    static size_t lastSelectedSkinIndex = 0;
-
-    static size_t lodLevel = 0;
-
-    if (firstFrameForAsset)
-    {
-        bodygroupModelSelected.clear();
-
-        bodygroupModelSelected.resize(parsedData->bodyParts.size(), 0ull);
-
-        selectedBodypartIndex = selectedBodypartIndex > parsedData->bodyParts.size() ? 0 : selectedBodypartIndex;
-        selectedSkinIndex = selectedSkinIndex > parsedData->skins.size() ? 0 : selectedSkinIndex;
-    }
-
-    assertm(parsedData->lods.size() > 0, "no lods in preview?");
-    const ModelLODData_t& lodData = parsedData->lods.at(lodLevel);
-
-    ImGui::Text("Bones: %llu", parsedData->bones.size());
-    ImGui::Text("LODs: %llu", parsedData->lods.size());
-    ImGui::Text("Rigs: %i", modelAsset->numAnimRigs);
-    ImGui::Text("Sequences: %i", modelAsset->numAnimSeqs);
-    ImGui::Text("Local Sequences: %i", modelAsset->parsedData.NumLocalSeq());
-
-    if (parsedData->skins.size())
-    {
-        ImGui::TextUnformatted("Skins:");
-        ImGui::SameLine();
-
-        // [rika]: cheat a little here since the first skin name should always be 'STUDIO_DEFAULT_SKIN_NAME'
-        static const char* label = nullptr;
-        if (firstFrameForAsset)
-            label = STUDIO_DEFAULT_SKIN_NAME;
-
-        if (ImGui::BeginCombo("##SKins", label, ImGuiComboFlags_NoArrowButton))
-        {
-            for (size_t i = 0; i < parsedData->skins.size(); i++)
-            {
-                const ModelSkinData_t& skin = parsedData->skins.at(i);
-
-                const bool isSelected = selectedSkinIndex == i || (firstFrameForAsset && selectedSkinIndex == lastSelectedSkinIndex);
-
-                if (ImGui::Selectable(skin.name, isSelected))
-                {
-                    selectedSkinIndex = i;
-                    label = skin.name;
-                }
-
-                if (isSelected) ImGui::SetItemDefaultFocus();
-            }
-
-            ImGui::EndCombo();
-        }
-    }
-
-    g_ExportSettings.previewedSkinIndex = static_cast<int>(selectedSkinIndex);
-
-    if (parsedData->bodyParts.size())
-    {
-        ImGui::TextUnformatted("Bodypart:");
-        ImGui::SameLine();
-
-        // [rika]: previous implemention was loading an invalid string upon loading different files without closing the tool
-        static const char* bodypartLabel = nullptr;
-        if (firstFrameForAsset)
-            bodypartLabel = parsedData->bodyParts.at(0).GetNameCStr();
-
-        if (ImGui::BeginCombo("##Bodypart", bodypartLabel, ImGuiComboFlags_NoArrowButton))
-        {
-            for (size_t i = 0; i < parsedData->bodyParts.size(); i++)
-            {
-                const ModelBodyPart_t& bodypart = parsedData->bodyParts.at(i);
-
-                const bool isSelected = selectedBodypartIndex == i || (firstFrameForAsset && selectedBodypartIndex == lastSelectedBodypartIndex);
-
-                if (ImGui::Selectable(bodypart.GetNameCStr(), isSelected))
-                {
-                    selectedBodypartIndex = i;
-                    bodypartLabel = bodypart.GetNameCStr();
-                }
-
-                if (isSelected) ImGui::SetItemDefaultFocus();
-            }
-
-            ImGui::EndCombo();
-        }
-
-        if (parsedData->bodyParts.at(selectedBodypartIndex).numModels > 1)
-        {
-            const ModelBodyPart_t& bodypart = parsedData->bodyParts.at(selectedBodypartIndex);
-            size_t& selectedModelIndex = bodygroupModelSelected.at(selectedBodypartIndex);
-
-            ImGui::TextUnformatted("Model:");
-            ImGui::SameLine();
-
-            static const char* label = nullptr;
-
-            // update label if our bodypart changes
-            if (selectedBodypartIndex != lastSelectedBodypartIndex || firstFrameForAsset)
-                label = lodData.models.at(bodypart.modelIndex + selectedModelIndex).name.c_str();
-
-            if (ImGui::BeginCombo("##Model", label, ImGuiComboFlags_NoArrowButton))
-            {
-                for (int i = 0; i < bodypart.numModels; i++)
-                {
-                    const bool isSelected = selectedModelIndex == i;
-
-                    const char* tmp = lodData.models.at(bodypart.modelIndex + i).name.c_str();
-                    if (ImGui::Selectable(tmp, isSelected))
-                    {
-                        selectedModelIndex = static_cast<size_t>(i);
-                        label = tmp;
-                    }
-
-                    if (isSelected) ImGui::SetItemDefaultFocus();
-                }
-
-                ImGui::EndCombo();
-            }
-        }
-    }    
-
-    /*if (modelAsset->materials.size() && modelAsset->skins.size())
-    {
-        ImGui::SeparatorText("Skin Materials");
-
-        const int numSkinRefs = modelAsset->studiohdr.numSkinRef;
-
-        int i = 0;
-        for (auto& skin : modelAsset->skins)
-        {
-            if (ImGui::CollapsingHeader(skin.name))
-            {
-                constexpr ImGuiTableFlags tableFlags =
-                    ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_NoBordersInBody
-                    | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
-                const ImVec2 outerSize = ImVec2(0.f, ImGui::GetTextLineHeightWithSpacing() * 12.f);
-
-
-                if (ImGui::BeginTable((std::string("mst_") + skin.name).c_str(), 3, tableFlags, outerSize))
-                {
-                    ImGui::TableSetupColumn("IDX", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 0.f);
-                    ImGui::TableSetupColumn("Material Name",ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 0.f);
-                    ImGui::TableSetupColumn("",ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 0.f);
-                    ImGui::TableSetupScrollFreeze(1, 1);
-
-
-                    for (int skinRefIdx = 0; skinRefIdx < numSkinRefs; ++skinRefIdx)
-                    {
-                        ImGui::PushID(skinRefIdx);
-                        ImGui::TableNextRow(ImGuiTableRowFlags_None, 0.f);
-
-
-                        const ModelMaterialData_t& materialData = modelAsset->materials.at(skin.indices[skinRefIdx]);
-
-                        if (ImGui::TableSetColumnIndex(0))
-                        {
-                            ImGui::TextUnformatted(std::to_string(i).c_str());
-                        }
-
-                        if (ImGui::TableSetColumnIndex(1))
-                        {
-                            ImGui::TextUnformatted(materialData.materialName.c_str());
-                        }
-
-                        if (ImGui::TableSetColumnIndex(2))
-                        {
-                            ImGui::TextUnformatted("");
-                        }
-
-                        ImGui::PopID();
-                    }
-
-                    ImGui::EndTable();
-
-
-                }
-            }
-
-            i++;
-        }
-    }*/
-
-    // [rika]: our currently selected skin
-    const ModelSkinData_t& skinData = parsedData->skins.at(selectedSkinIndex);
-    for (size_t i = 0; i < lodData.meshes.size(); ++i)
-    {
-        const ModelMeshData_t& mesh = lodData.meshes.at(i);
-        DXMeshDrawData_t* const meshDrawData = &drawData->meshBuffers[i];
-
-        meshDrawData->indexFormat = DXGI_FORMAT_R16_UINT;
-
-        // If this body part is disabled, don't draw the mesh.
-        drawData->meshBuffers[i].visible = parsedData->bodyParts[mesh.bodyPartIndex].IsPreviewEnabled();
-
-        const ModelBodyPart_t& bodypart = parsedData->bodyParts[mesh.bodyPartIndex];
-        const ModelModelData_t& model = lodData.models.at(bodypart.modelIndex + bodygroupModelSelected.at(mesh.bodyPartIndex));
-        if (i >= model.meshIndex && i < model.meshIndex + model.meshCount)
-            drawData->meshBuffers[i].visible = true;
-        else
-            drawData->meshBuffers[i].visible = false;
-
-        // the rest of this loop requires the material to be valid
-        // so if it isn't just continue to the next iteration
-        CPakAsset* const matlAsset = parsedData->materials.at(skinData.indices[mesh.materialId]).asset;
-        if (!matlAsset)
-            continue;
-
-        const MaterialAsset* const matl = reinterpret_cast<MaterialAsset*>(matlAsset->extraData());
-
-#if defined(ADVANCED_MODEL_PREVIEW)
-        if (matl->shaderSetAsset)
-        {
-            ShaderSetAsset* const shaderSet = reinterpret_cast<ShaderSetAsset*>(matl->shaderSetAsset->extraData());
-
-            if (shaderSet->vertexShaderAsset && shaderSet->pixelShaderAsset)
-            {
-                ShaderAsset* const vertexShader = reinterpret_cast<ShaderAsset*>(shaderSet->vertexShaderAsset->extraData());
-                ShaderAsset* const pixelShader = reinterpret_cast<ShaderAsset*>(shaderSet->pixelShaderAsset->extraData());
-
-                meshDrawData->vertexShader = vertexShader->vertexShader;
-                meshDrawData->pixelShader  = pixelShader->pixelShader;
-
-                meshDrawData->inputLayout = vertexShader->vertexInputLayout;
-            }
-        }
-#endif
-
-        if ((meshDrawData->textures.size() == 0 || lastSelectedSkinIndex != selectedSkinIndex) && matl)
-        {
-            meshDrawData->textures.clear();
-            for (auto& texEntry : matl->txtrAssets)
-            {
-                if (texEntry.asset)
-                {
-                    TextureAsset* txtr = reinterpret_cast<TextureAsset*>(texEntry.asset->extraData());
-                    const std::shared_ptr<CTexture> highestTextureMip = CreateTextureFromMip(texEntry.asset, &txtr->mipArray[txtr->mipArray.size() - 1], s_PakToDxgiFormat[txtr->imgFormat]);
-                    meshDrawData->textures.push_back({ texEntry.index, highestTextureMip });
-                }
-            }
-        }
-    }
-
-    if (!drawData->boneMatrixBuffer)
-        InitModelBoneMatrix(drawData, parsedData);
-
-
-    if (!drawData->transformsBuffer)
-    {
-        D3D11_BUFFER_DESC desc{};
-
-#if defined(ADVANCED_MODEL_PREVIEW)
-        constexpr UINT transformsBufferSizeAligned = IALIGN(sizeof(CBufModelInstance), 16);
-#else
-        constexpr UINT transformsBufferSizeAligned = IALIGN(sizeof(VS_TransformConstants), 16);
-#endif
-
-        desc.ByteWidth = transformsBufferSizeAligned;
-
-        // make sure this buffer can be updated every frame
-        desc.Usage = D3D11_USAGE_DYNAMIC;
-        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-        // const buffer
-        desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-
-        g_dxHandler->GetDevice()->CreateBuffer(&desc, NULL, &drawData->transformsBuffer);
-    }
-
-    D3D11_MAPPED_SUBRESOURCE resource;
-    g_dxHandler->GetDeviceContext()->Map(
-        drawData->transformsBuffer, 0,
-        D3D11_MAP_WRITE_DISCARD, 0,
-        &resource
-    );
-
-    CDXCamera* const camera = g_dxHandler->GetCamera();
-    const XMMATRIX view = camera->GetViewMatrix();
-    const XMMATRIX model = XMMatrixTranslationFromVector(drawData->position.AsXMVector());
-    const XMMATRIX projection = g_dxHandler->GetProjMatrix();
-
-#if !defined(ADVANCED_MODEL_PREVIEW)
-    VS_TransformConstants* const transforms = reinterpret_cast<VS_TransformConstants*>(resource.pData);
-    transforms->modelMatrix = XMMatrixTranspose(model);
-    transforms->viewMatrix = XMMatrixTranspose(view);
-    transforms->projectionMatrix = XMMatrixTranspose(projection);
-#else
-    CBufModelInstance* const modelInstance = reinterpret_cast<CBufModelInstance*>(resource.pData);
-    CBufModelInstance::ModelInstance& mi = modelInstance->c_modelInst;
-
-    // sub_18001FB40 in r2
-    XMMATRIX modelMatrix = {};
-    memcpy(&modelMatrix, &modelAsset->bones[0].poseToBone, sizeof(ModelBone_t::poseToBone));
-
-    modelMatrix.r[3].m128_f32[3] = 1.f;
-
-    mi.objectToCameraRelativePrevFrame = mi.objectToCameraRelative;
-
-    modelMatrix.r[0].m128_f32[3] += camera->position.x;
-    modelMatrix.r[1].m128_f32[3] += camera->position.y;
-    modelMatrix.r[2].m128_f32[3] += camera->position.z;
-
-    modelMatrix -= XMMatrixRotationRollPitchYaw(camera->rotation.x, camera->rotation.y, camera->rotation.z);
-
-    modelMatrix = XMMatrixTranspose(modelMatrix);
-
-    mi.diffuseModulation = { 1.f, 1.f, 1.f, 1.f };
-
-    XMStoreFloat3x4(&mi.objectToCameraRelative, modelMatrix);
-    XMStoreFloat3x4(&mi.objectToCameraRelativePrevFrame, modelMatrix);
-
-#endif
-
-    if (lastSelectedBodypartIndex != selectedBodypartIndex)
-        lastSelectedBodypartIndex = selectedBodypartIndex;
-    
-    if (lastSelectedSkinIndex != selectedSkinIndex)
-        lastSelectedSkinIndex = selectedSkinIndex;
-
-    g_dxHandler->GetDeviceContext()->Unmap(drawData->transformsBuffer, 0);
-
-    return modelAsset->drawData;
 }
 
 void InitModelAssetType()

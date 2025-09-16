@@ -28,7 +28,7 @@ namespace r5
 		return (s_AnimSeekLUT[lutBaseIdx] + ((s_AnimSeekLUT[lutBaseIdx + 1] + panimvalue->num.total * s_AnimSeekLUT[lutBaseIdx + 2]) >> 4));
 	}
 
-	inline void ExtractAnimValue(mstudioanimvalue_t* panimvalue, const int frame, const float scale, float& v1)
+	inline void ExtractAnimValue(const mstudioanimvalue_t* panimvalue, const int frame, const float scale, float& v1)
 	{
 		// note: in R5 'valid' is not really used the same way as traditional source.
 		switch (panimvalue->num.valid)
@@ -47,7 +47,7 @@ namespace r5
 
 			// there is a signed char for every frame after index 0 to adjust the basic value, this limits changes to be +-127 compressed
 			if (frame > 0)
-				value += reinterpret_cast<char*>(&panimvalue[2])[frame - 1]; // the char values start after the base
+				value += reinterpret_cast<const char*>(&panimvalue[2])[frame - 1]; // the char values start after the base
 
 			v1 = static_cast<float>(value) * scale;
 
@@ -106,7 +106,7 @@ namespace r5
 		}
 	}
 
-	void ExtractAnimValue(int frame, mstudioanimvalue_t* panimvalue, float scale, float& v1)
+	void ExtractAnimValue(int frame, const mstudioanimvalue_t* panimvalue, float scale, float& v1)
 	{
 		int k = frame;
 
@@ -120,7 +120,7 @@ namespace r5
 		ExtractAnimValue(panimvalue, k, scale, v1);
 	}
 
-	void ExtractAnimValue(int frame, mstudioanimvalue_t* panimvalue, float scale, float& v1, float& v2)
+	void ExtractAnimValue(int frame, const mstudioanimvalue_t* panimvalue, float scale, float& v1, float& v2)
 	{
 		int k = frame;
 
@@ -658,4 +658,7 @@ namespace r5
 		pos.y = ((static_cast<float>(axisFixup->adjustment[1]) / 100.0f) + static_cast<float>(packedPos.values[1])) * scaleFac;
 		pos.z = ((static_cast<float>(axisFixup->adjustment[2]) / 100.0f) + static_cast<float>(packedPos.values[2])) * scaleFac;
 	}
+
+	// not definted when declared
+	mstudioanimdesc_v12_1_t* mstudioseqdesc_v8_t::pAnimDescV12_1(const int i) const { return reinterpret_cast<mstudioanimdesc_v12_1_t*>((char*)this + AnimIndex(i)); }
 }

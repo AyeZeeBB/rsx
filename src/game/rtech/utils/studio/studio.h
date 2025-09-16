@@ -12,7 +12,7 @@ constexpr const char* STUDIO_DEFAULT_SKIN_NAME = "default";
 constexpr const char* STUDIO_NULL_SKIN_NAME = "null";
 
 static constexpr int s_MaxStudioVerts		= 65536;
-static constexpr int s_MaxStudioTriangles	= 131072;
+static constexpr int s_MaxStudioTriangles	= 262144; // normal source 131072
 #define MAXSTUDIOSRCVERTS		(8*65536)
 
 #define MODEL_FILE_ID				MAKEFOURCC('I', 'D', 'S', 'T') // little-endian "IDST"
@@ -668,6 +668,55 @@ namespace vg
 // STUDIO MODEL DATA
 //===================
 
+
+//
+// Model Bones
+//
+
+// 'STUDIO_PROC_JIGGLE' the only one observed in respawn games
+#define STUDIO_PROC_AXISINTERP	1
+#define STUDIO_PROC_QUATINTERP	2
+#define STUDIO_PROC_AIMATBONE	3
+#define STUDIO_PROC_AIMATATTACH 4
+#define STUDIO_PROC_JIGGLE		5
+#define STUDIO_PROC_TWIST_MASTER	6
+#define STUDIO_PROC_TWIST_SLAVE		7 // Multiple twist bones are computed at once for the same parent/child combo so TWIST_NULL do nothing
+
+#define BONE_CALCULATE_MASK			0x1F	// 0x1F -> 0x2F (cannot be confirmed, unused)
+#define BONE_PHYSICALLY_SIMULATED	0x01	// bone is physically simulated when physics are active
+#define BONE_PHYSICS_PROCEDURAL		0x02	// procedural when physics is active
+#define BONE_ALWAYS_PROCEDURAL		0x04	// bone is always procedurally animated
+#define BONE_SCREEN_ALIGN_SPHERE	0x08	// bone aligns to the screen, not constrained in motion.
+#define BONE_SCREEN_ALIGN_CYLINDER	0x10	// bone aligns to the screen, constrained by it's own axis.
+#define BONE_IKCHAIN_INFLUENCE		0x20	// bone is influenced by IK chains, added in V52 (Titanfall 1)
+
+#define BONE_USED_MASK				0x0007FF00
+#define BONE_USED_BY_ANYTHING		0x0007FF00
+#define BONE_USED_BY_HITBOX			0x00000100	// bone (or child) is used by a hit box
+#define BONE_USED_BY_ATTACHMENT		0x00000200	// bone (or child) is used by an attachment point
+#define BONE_USED_BY_VERTEX_MASK	0x0003FC00
+#define BONE_USED_BY_VERTEX_LOD0	0x00000400	// bone (or child) is used by the toplevel model via skinned vertex
+#define BONE_USED_BY_VERTEX_LOD1	0x00000800	
+#define BONE_USED_BY_VERTEX_LOD2	0x00001000  
+#define BONE_USED_BY_VERTEX_LOD3	0x00002000
+#define BONE_USED_BY_VERTEX_LOD4	0x00004000
+#define BONE_USED_BY_VERTEX_LOD5	0x00008000
+#define BONE_USED_BY_VERTEX_LOD6	0x00010000
+#define BONE_USED_BY_VERTEX_LOD7	0x00020000
+#define BONE_USED_BY_BONE_MERGE		0x00040000	// bone is available for bone merge to occur against it
+#define BONE_FLAG_UNK_80000			0x00080000	// where?
+
+#define BONE_USED_BY_VERTEX_AT_LOD(lod) ( BONE_USED_BY_VERTEX_LOD0 << (lod) )
+#define BONE_USED_BY_ANYTHING_AT_LOD(lod) ( ( BONE_USED_BY_ANYTHING & ~BONE_USED_BY_VERTEX_MASK ) | BONE_USED_BY_VERTEX_AT_LOD(lod) )
+
+#define BONE_TYPE_MASK				0x00F00000
+#define BONE_FIXED_ALIGNMENT		0x00100000	// bone can't spin 360 degrees, all interpolation is normalized around a fixed orientation
+
+#define BONE_HAS_SAVEFRAME_POS		0x00200000	// Vector48
+#define BONE_HAS_SAVEFRAME_ROT64	0x00400000	// Quaternion64
+#define BONE_HAS_SAVEFRAME_ROT32	0x00800000	// Quaternion32
+#define BONE_FLAG_UNK_1000000		0x01000000	// where?
+
 struct mstudiosrcbonetransform_t
 {
 	int			sznameindex;
@@ -677,29 +726,88 @@ struct mstudiosrcbonetransform_t
 	matrix3x4_t	posttransform;
 };
 
-struct mstudio_meshvertexloddata_t
-{
-	int modelvertexdataUnusedPad; // likely has none of the funny stuff because unused
+const mstudiosrcbonetransform_t* const GetSrcBoneTransform(const char* const bone, const mstudiosrcbonetransform_t* const pSrcBoneTransforms, const int numSrcBoneTransforms);
 
-	int numLODVertexes[MAX_NUM_LODS]; // depreciated starting with rmdl v14(?)
+#define	ATTACHMENT_FLAG_WORLD_ALIGN 0x10000
+
+// all of source up until r5
+struct mstudioattachment_t
+{
+	int				sznameindex;
+	inline const char* const pszName() const { return reinterpret_cast<const char* const>(this) + sznameindex; }
+	unsigned int	flags;
+	int				localbone;
+	matrix3x4_t		local; // attachment point
+	int				unused[8];
 };
 
-struct mstudiobodyparts_t
+// r1 and generic source
+struct mstudiobbox_t
 {
-	int					sznameindex;
-	inline char* const pszName() const { return ((char*)this + sznameindex); }
-
-	int					nummodels;
-	int					base;
-	int					modelindex; // index into models array
-
-	template<typename T>
-	inline const T* pModel(int i) const
+	int bone;
+	int group;				// intersection group
+	Vector bbmin;			// bounding box
+	Vector bbmax;
+	int szhitboxnameindex;	// offset to the name of the hitbox.
+	inline const char* const pszHitboxName() const
 	{
-		return reinterpret_cast<T*>((char*)this + modelindex) + i;
-	};
+		if (szhitboxnameindex == 0)
+			return "";
+
+		return reinterpret_cast<const char* const>(this) + szhitboxnameindex;
+	}
+
+	int unused[8];
 };
-static_assert(sizeof(mstudiobodyparts_t) == 0x10);
+
+// this struct is the same in r1, r2, and early r5, and unchanged from p2
+struct mstudiohitboxset_t
+{
+	int sznameindex;
+	const char* const pszName() const { return reinterpret_cast<const char* const>(this) + sznameindex; }
+
+	int numhitboxes;
+	int hitboxindex;
+	template<typename mstudiobbox_t> const mstudiobbox_t* const pHitbox(const int i) const { return reinterpret_cast<const mstudiobbox_t* const>((char*)this + hitboxindex) + i; }
+};
+
+
+//
+// Model IK Info
+//
+
+struct mstudioiklock_t
+{
+	int chain;
+	float flPosWeight;
+	float flLocalQWeight;
+	int flags;
+
+	int unused[4];
+};
+
+struct mstudioiklink_t
+{
+	int bone;
+	Vector kneeDir;	// ideal bending direction (per link, if applicable)
+	Vector unused0;	// unused
+};
+
+struct mstudioikchain_t
+{
+	int sznameindex;
+	inline const char* const pszName() const { return reinterpret_cast<const char* const>(this) + sznameindex; }
+
+	int linktype;
+	int numlinks;
+	int linkindex;
+	const mstudioiklink_t* const pLink(int i) const { return reinterpret_cast<const mstudioiklink_t* const>((char*)this + linkindex) + i; }
+};
+
+
+//
+// Model Animation
+// 
 
 union mstudioanimvalue_t
 {
@@ -729,9 +837,194 @@ enum eStudioAnimFlags
 	ANIM_DATAPOINT		= 0x200000,	// uses 'datapoint' style compression instead of 'rle' style
 };
 
+// sequence and autolayer flags
+#define STUDIO_LOOPING		0x0001		// ending frame should be the same as the starting frame
+#define STUDIO_SNAP			0x0002		// do not interpolate between previous animation and this one
+#define STUDIO_DELTA		0x0004		// this sequence "adds" to the base sequences, not slerp blends
+#define STUDIO_AUTOPLAY		0x0008		// temporary flag that forces the sequence to always play
+#define STUDIO_POST			0x0010		// 
+#define STUDIO_ALLZEROS		0x0020		// this animation/sequence has no real animation data
+#define STUDIO_FRAMEANIM	0x0040		// animation is encoded as by frame x bone instead of RLE bone x frame
+#define STUDIO_ANIM_UNK40	0x0040		// suppgest ?
+#define STUDIO_CYCLEPOSE	0x0080		// cycle index is taken from a pose parameter index
+#define STUDIO_REALTIME		0x0100		// cycle index is taken from a real-time clock, not the animations cycle index
+#define STUDIO_LOCAL		0x0200		// sequence has a local context sequence
+#define STUDIO_HIDDEN		0x0400		// don't show in default selection views
+#define STUDIO_OVERRIDE		0x0800		// a forward declared sequence (empty)
+#define STUDIO_ACTIVITY		0x1000		// Has been updated at runtime to activity index
+#define STUDIO_EVENT		0x2000		// Has been updated at runtime to event index on server
+#define STUDIO_WORLD		0x4000		// sequence blends in worldspace
+#define STUDIO_NOFORCELOOP		0x8000	// do not force the animation loop
+#define STUDIO_EVENT_CLIENT		0x10000	// Has been updated at runtime to event index on client
+#define STUDIO_HAS_SCALE		0x20000 // only appears on anims with scale, used for quick lookup in ScaleBones, only reason this should be check is if there has been scale data parsed in, otherwise it is pointless (see ScaleBones checking if scale is 1.0f). note: in r5 this is only set on sequence
+#define STUDIO_HAS_ANIM			0x20000 // if not set there is no useable anim data
+#define STUDIO_FRAMEMOVEMENT    0x40000 // framemovements are only read if this flag is present
+#define STUDIO_SINGLE_FRAME		0x80000 // this animation/sequence only has one frame of animation data
+// 0x100000
+#define STUDIO_DATAPOINTANIM	0x200000
+
+#define NEW_EVENT_STYLE ( 1 << 10 )
+
+#define STUDIO_X		0x00000001
+#define STUDIO_Y		0x00000002	
+#define STUDIO_Z		0x00000004
+#define STUDIO_XR		0x00000008
+#define STUDIO_YR		0x00000010
+#define STUDIO_ZR		0x00000020
+
+#define STUDIO_LX		0x00000040
+#define STUDIO_LY		0x00000080
+#define STUDIO_LZ		0x00000100
+#define STUDIO_LXR		0x00000200
+#define STUDIO_LYR		0x00000400
+#define STUDIO_LZR		0x00000800
+
+#define STUDIO_LINEAR	0x00001000
+
+#define STUDIO_TYPES	0x0003FFFF
+#define STUDIO_RLOOP	0x00040000	// controller that wraps shortest distance
+
+struct mstudiomovement_t
+{
+	int		endframe;
+	int		motionflags;
+	float	v0;			// velocity at start of block
+	float	v1;			// velocity at end of block
+	float	angle;		// YAW rotation at end of this blocks movement
+	Vector	vector;		// movement vector relative to this blocks initial angle
+	Vector	position;	// relative to start of animation???
+};
+
+struct mstudioposeparamdesc_t
+{
+	int		sznameindex;
+	inline const char* const pszName() const { return reinterpret_cast<const char* const>(this) + sznameindex; }
+
+	int		flags;	// ???? (may contain 'STUDIO_LOOPING' flag if looping is used)
+	float	start;	// starting value
+	float	end;	// ending value
+	float	loop;	// looping range, 0 for no looping, 360 for rotations, etc.
+};
+
+struct mstudiomodelgroup_t
+{
+	int szlabelindex;	// textual name (NOTE: this is never actually set or used anywhere in reSource, or valve source)
+	inline const char* const pszLabel() const { return reinterpret_cast<const char* const>(this) + szlabelindex; }
+
+	int sznameindex;	// file name
+	inline const char* const pszName() const { return reinterpret_cast<const char* const>(this) + sznameindex; }
+};
+
+
+//
+// Model Bodyparts
+//
+
+struct mstudio_meshvertexloddata_t
+{
+	int modelvertexdataUnusedPad; // likely has none of the funny stuff because unused
+
+	int numLODVertexes[MAX_NUM_LODS]; // depreciated starting with rmdl v14(?)
+};
+
+struct mstudiobodyparts_t
+{
+	int sznameindex;
+	inline char* const pszName() const { return ((char*)this + sznameindex); }
+
+	int nummodels;
+	int base;
+	int modelindex; // index into models array
+
+	template<typename T>
+	inline const T* pModel(int i) const
+	{
+		return reinterpret_cast<T*>((char*)this + modelindex) + i;
+	};
+};
+static_assert(sizeof(mstudiobodyparts_t) == 0x10);
+
+
+//
+// Studio Header Flags
+// 
+
+// This flag is set if no hitbox information was specified
+#define STUDIOHDR_FLAGS_AUTOGENERATED_HITBOX	0x1
+
+// Use this when there are translucent parts to the model but we're not going to sort it 
+#define STUDIOHDR_FLAGS_FORCE_OPAQUE			0x4
+
+// Use this when we want to render the opaque parts during the opaque pass
+// and the translucent parts during the translucent pass
+#define STUDIOHDR_FLAGS_TRANSLUCENT_TWOPASS		0x8
+
 // This is set any time the .qc files has $staticprop in it
 // Means there's no bones and no transforms
 #define STUDIOHDR_FLAGS_STATIC_PROP				0x10
+
+// NOTE:  This flag is set at loadtime, not mdl build time so that we don't have to rebuild
+// models when we change materials.
+#define STUDIOHDR_FLAGS_USES_FB_TEXTURE		    0x20
+
+// This flag is set by studiomdl.exe if a separate "$shadowlod" entry was present
+//  for the .mdl (the shadow lod is the last entry in the lod list if present)
+#define STUDIOHDR_FLAGS_HASSHADOWLOD			0x40
+
+// NOTE:  This flag is set at loadtime, not mdl build time so that we don't have to rebuild
+// models when we change materials.
+#define STUDIOHDR_FLAGS_USES_BUMPMAPPING		0x80
+
+// NOTE:  This flag is set when we should use the actual materials on the shadow LOD
+// instead of overriding them with the default one (necessary for translucent shadows)
+#define STUDIOHDR_FLAGS_USE_SHADOWLOD_MATERIALS	0x100
+
+#define STUDIOHDR_FLAGS_OBSOLETE				0x200
+
+// NOTE:  This flag is set at mdl build time
+#define STUDIOHDR_FLAGS_NO_FORCED_FADE			0x800
+
+// NOTE:  The npc will lengthen the viseme check to always include two phonemes
+#define STUDIOHDR_FLAGS_FORCE_PHONEME_CROSSFADE	0x1000
+
+// This flag is set when the .qc has $constantdirectionallight in it
+// If set, we use constantdirectionallightdot to calculate light intensity
+// rather than the normal directional dot product
+// only valid if STUDIOHDR_FLAGS_STATIC_PROP is also set
+// NOTE: as of rmdl v16 this field is missing, cut in apex ?
+#define STUDIOHDR_FLAGS_CONSTANT_DIRECTIONAL_LIGHT_DOT 0x2000
+
+// This flag indicates that the model has extra weights, which allows it to have 3< weights per bone.
+#define STUDIOHDR_FLAGS_USES_EXTRA_BONE_WEIGHTS	0x4000
+
+// Indicates the studiomdl was built in preview mode
+#define STUDIOHDR_FLAGS_BUILT_IN_PREVIEW_MODE	0x8000
+
+// Ambient boost (runtime flag)
+#define STUDIOHDR_FLAGS_AMBIENT_BOOST			0x10000
+
+// Don't cast shadows from this model (useful on first-person models)
+#define STUDIOHDR_FLAGS_DO_NOT_CAST_SHADOWS		0x20000
+
+// alpha textures should cast shadows in vrad on this model (ONLY prop_static!)
+#define STUDIOHDR_FLAGS_CAST_TEXTURE_SHADOWS	0x40000
+
+// Model has a quad-only Catmull-Clark SubD cage
+#define STUDIOHDR_FLAGS_SUBDIVISION_SURFACE		0x80000
+
+// if set we do not check local sequences (only hit if no virtual model). flag check replaces checking include models, arigs?
+// Model uses external sequences (studiohdr_t::pSeqDesc r5_250)
+#define STUDIOHDR_FLAGS_USES_EXTERNAL_SEQUENCES	0x80000
+
+// flagged on load to indicate no animation events on this model
+// might be a different thing on v54
+#define STUDIOHDR_FLAGS_NO_ANIM_EVENTS			0x100000
+
+// If flag is set then studiohdr_t.flVertAnimFixedPointScale contains the
+// scale value for fixed point vert anim data, if not set then the
+// scale value is the default of 1.0 / 4096.0.  Regardless use
+// studiohdr_t::VertAnimFixedPointScale() to always retrieve the scale value
+#define STUDIOHDR_FLAGS_VERT_ANIM_FIXED_POINT_SCALE	0x200000
 
 // If this flag is present the model has vertex color, and by extension a VVC (IDVC) file.
 #define STUDIOHDR_FLAGS_USES_VERTEX_COLOR	        0x1000000

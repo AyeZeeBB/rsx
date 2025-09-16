@@ -90,7 +90,7 @@ void HandleMDLLoad(std::vector<std::string> filePaths)
 
             for (int i = 0; i < pLocalHdr->numlocalseq; i++)
             {
-                r2::mstudioseqdesc_t* const pSeqdesc = pLocalHdr->pSeqdesc(i);
+                const r2::mstudioseqdesc_t* const pSeqdesc = pLocalHdr->pSeqdesc(i);
                 const std::string seqPath = std::format("{}/{}.seq", basePath, pSeqdesc->pszLabel());
 
                 CSourceSequenceAsset* srcSeqAsset = new CSourceSequenceAsset(srcMdlAsset, pSeqdesc, seqPath);

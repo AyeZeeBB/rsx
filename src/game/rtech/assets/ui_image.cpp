@@ -4,6 +4,8 @@
 #include <core/render/dx.h>
 #include <thirdparty/imgui/imgui.h>
 
+extern CDXParentHandler* g_dxHandler;
+
 void LoadUIImageAsset(CAssetContainer* const pak, CAsset* const asset)
 {
     CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
@@ -416,7 +418,6 @@ std::unique_ptr<CTexture> CreateBC7TextureForUIImageAsset(CPakAsset* const asset
     unreachable();
 }
 
-extern CDXParentHandler* g_dxHandler;
 std::shared_ptr<CTexture> CreateTextureForImage(CPakAsset* const asset, UIImageAsset* const uiAsset, const UIImageAsset::QualityData* const resData, const bool doStreaming, const bool doTiling)
 {
     // We want max 2 threads but clamp to 1 incase we get an invalid count.
@@ -584,7 +585,7 @@ void* PreviewUIImageAsset(CAsset* const asset, const bool firstFrameForAsset)
         ImGui::EndTable();
     }
 
-    const CTexture* const selectedUITxtr = selectedUITexture.get();
+    CTexture* const selectedUITxtr = selectedUITexture.get();
     if (selectedUITxtr)
     {
         const float aspectRatio = static_cast<float>(selectedUITxtr->GetWidth()) / selectedUITxtr->GetHeight();

@@ -3,15 +3,14 @@
 #include <game/rtech/utils/studio/studio_r1.h>
 #include <game/rtech/utils/studio/studio_r2.h>
 #include <game/rtech/utils/studio/studio_r5.h>
-#include <game/rtech/utils/studio/studio_r5_v8.h>
 #include <game/rtech/utils/studio/studio_r5_v12.h>
 #include <game/rtech/utils/studio/studio_r5_v16.h>
 
 struct animmovement_t
 {
 	animmovement_t(const animmovement_t& movement);
-	animmovement_t(r1::mstudioframemovement_t* movement);
-	animmovement_t(r5::mstudioframemovement_t* movement, const int frameCount, const bool indexType);
+	animmovement_t(const r1::mstudioframemovement_t* const movement);
+	animmovement_t(const r5::mstudioframemovement_t* const movement, const int frameCount, const bool indexType);
 
 	~animmovement_t()
 	{
@@ -22,7 +21,7 @@ struct animmovement_t
 		}
 	}
 
-	void* baseptr;
+	const void* baseptr;
 	float scale[4];
 
 	union
@@ -37,8 +36,8 @@ struct animmovement_t
 	inline int SectionOffset(const int frame) const { return sections[SectionIndex(frame)]; }
 	inline uint16_t* pSection(const int frame) const { return reinterpret_cast<uint16_t*>((char*)baseptr + SectionOffset(frame)); }
 
-	inline mstudioanimvalue_t* pAnimvalue(const int i, const uint16_t* section) const { return (section[i] > 0) ? reinterpret_cast<mstudioanimvalue_t*>((char*)section + section[i]) : nullptr; }
-	inline mstudioanimvalue_t* pAnimvalue(int i) const { return (offset[i] > 0) ? reinterpret_cast<mstudioanimvalue_t*>((char*)this + offset[i]) : nullptr; }
+	inline const mstudioanimvalue_t* const pAnimvalue(const int i, const uint16_t* section) const { return (section[i] > 0) ? reinterpret_cast<const mstudioanimvalue_t* const>((char*)section + section[i]) : nullptr; }
+	inline const mstudioanimvalue_t* const pAnimvalue(int i) const { return (offset[i] > 0) ? reinterpret_cast<const mstudioanimvalue_t* const>((char*)baseptr + offset[i]) : nullptr; }
 };
 
 struct animsection_t
@@ -53,17 +52,17 @@ struct animsection_t
 struct animdesc_t
 {
 	animdesc_t(const animdesc_t& animdesc);
-	animdesc_t(r2::mstudioanimdesc_t* animdesc);
-	animdesc_t(r5::mstudioanimdesc_v8_t* animdesc);
-	animdesc_t(r5::mstudioanimdesc_v12_1_t* animdesc, char* ext);
-	animdesc_t(r5::mstudioanimdesc_v16_t* animdesc, char* ext);
+	animdesc_t(const r2::mstudioanimdesc_t* const animdesc);
+	animdesc_t(const r5::mstudioanimdesc_v8_t* const animdesc);
+	animdesc_t(const r5::mstudioanimdesc_v12_1_t* const animdesc, const char* const ext);
+	animdesc_t(const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext);
 
 	~animdesc_t()
 	{
 		if (nullptr != movement) delete movement;
 	}
 
-	void* baseptr; // for getting to the animations
+	const void* baseptr; // for getting to the animations
 	const char* name;
 
 	float fps;
@@ -80,9 +79,9 @@ struct animdesc_t
 	int animindex;
 
 	// data array, starting with per bone flags
-	char* pAnimdataNoStall(int* const piFrame) const;
-	char* pAnimdataStall(int* const piFrame) const;
-	char* pAnimdataStall_DP(int* const piFrame, int* const sectionFrameCount) const;
+	const char* const pAnimdataNoStall(int* const piFrame) const;
+	const char* const pAnimdataStall(int* const piFrame) const;
+	const char* const pAnimdataStall_DP(int* const piFrame, int* const sectionFrameCount) const;
 
 	int sectionindex; // can be safely removed
 	int sectionstallframes; // number of static frames inside the animation, the reset excluding the final frame are stored externally. when external data is not loaded(?)/found(?) it falls back on the last frame of this as a stall
@@ -115,7 +114,7 @@ struct animdesc_t
 		return SectionCount_RLE();
 	}
 
-	char* sectionDataExtra;
+	const char* sectionDataExtra;
 
 	size_t parsedBufferIndex;
 
@@ -126,16 +125,17 @@ struct animdesc_t
 		return cycle;
 	}
 };
+typedef const char* const (animdesc_t::* AnimdataFunc_t)(int* const) const;
 
 struct seqdesc_t
 {
 	// todo: studio version 12.3 has a different event struct, will need to parse this for qc
 	seqdesc_t() = default;
-	seqdesc_t(r2::mstudioseqdesc_t* seqdesc);
-	seqdesc_t(r5::mstudioseqdesc_v8_t* seqdesc);
-	seqdesc_t(r5::mstudioseqdesc_v8_t* seqdesc, char* ext);
-	seqdesc_t(r5::mstudioseqdesc_v16_t* seqdesc, char* ext);
-	seqdesc_t(r5::mstudioseqdesc_v18_t* seqdesc, char* ext);
+	seqdesc_t(const r2::mstudioseqdesc_t* const seqdesc);
+	seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc);
+	seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc, const char* const ext);
+	seqdesc_t(const r5::mstudioseqdesc_v16_t* const seqdesc, const char* const ext);
+	seqdesc_t(const r5::mstudioseqdesc_v18_t* const seqdesc, const char* const ext);
 
 	seqdesc_t& operator=(seqdesc_t&& seqdesc) noexcept
 	{
@@ -154,7 +154,7 @@ struct seqdesc_t
 		return *this;
 	}
 
-	void* baseptr;
+	const void* baseptr;
 
 	const char* szlabel;
 	const char* szactivityname;
@@ -255,11 +255,13 @@ struct studiohdr_generic_t
 
 	int cdTexturesCount;
 	int cdTexturesOffset;
+	inline const char* const pCdtexture(const int i) const { return baseptr + reinterpret_cast<const int* const>(baseptr + cdTexturesOffset)[i]; }
 
 	int numSkinRef;			// skingroup width (how many textures/indices per group)
 	int numSkinFamilies;	// number of skingroups
 	int skinOffset;
-	inline const int16_t* const pSkinFamily(const int i) const { return reinterpret_cast<const int16_t*>(baseptr + skinOffset) + (numSkinRef * i); };
+	inline const int16_t* const pSkinref(const int i) const { return reinterpret_cast<const int16_t* const>(baseptr + skinOffset) + i; }
+	inline const int16_t* const pSkinFamily(const int i) const { return pSkinref(numSkinRef * i); };
 	inline const char* const pSkinName(const int i) const
 	{
 		// only stored for index 1 and up
@@ -297,35 +299,49 @@ struct studiohdr_generic_t
 
 	// node
 
-	// ikchain
+	int ikChainCount;
+	int ikChainOffset;
 
-	// poseparm
+	int localPoseParamCount;
+	int localPoseParamOffset;
 
 	int surfacePropOffset;	// offset to surface prop string
 	inline const char* const pszSurfaceProp() const { return baseptr + surfacePropOffset; }
 
 	int keyValueOffset;		// offset to keyvalues
 	int keyValueSize;		// removed in later rmdl, keyvalues are null terminated
+	inline const char* const KeyValueText() const { return baseptr + keyValueOffset; }
+
+	int localIkAutoPlayLockCount;
+	int localIkAutoPlayLockOffset;
 
 	float mass;
 	int contents;	// contents mask, see bspflags.h
 
-	// includemodel
+	int includeModelCount;
+	int includeModelOffset;
 
-	char constdirectionallightdot;
+	uint8_t constdirectionallightdot;
+	uint8_t rootLOD;
+	uint8_t numAllowedRootLODs;
 
-	char pad[3];
+	uint8_t pad;
 
 	float fadeDistance; // set to -1 to never fade. set above 0 if you want it to fade out, distance is in feet.
 	float gatherSize;
 
 	int	illumpositionattachmentindex;
 
+	float flMaxEyeDeflection;
+
 	int linearBoneOffset; // offset to mstudiolinearbone_t (null if not present)
 
 	int srcBoneTransformCount;
 	int srcBoneTransformOffset;
 	inline const mstudiosrcbonetransform_t* const pSrcBoneTransform(const int i) const { return reinterpret_cast<const mstudiosrcbonetransform_t* const>(baseptr + srcBoneTransformOffset) + i; }
+
+	int boneFollowerCount;
+	int boneFollowerOffset;
 
 	int vtxOffset; // VTX
 	int vvdOffset; // VVD / IDSV

@@ -3,7 +3,6 @@
 
 #include <thirdparty/imgui/imgui.h>
 
-extern CDXParentHandler* g_dxHandler;
 extern ExportSettings_t g_ExportSettings;
 
 

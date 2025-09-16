@@ -25,7 +25,7 @@ private:
 class CSourceModelAsset : public CAsset
 {
 public:
-	CSourceModelAsset(const studiohdr_short_t* const pStudioHdr) : m_modelParsed(nullptr), m_modelDrawData(nullptr), m_sequences(nullptr), m_numSequences(0)
+	CSourceModelAsset(const studiohdr_short_t* const pStudioHdr) : m_modelParsed(nullptr), m_sequences(nullptr), m_numSequences(0)
 	{
 		const int length = pStudioHdr->length();
         char* tmpBuf = new char[length];
@@ -45,7 +45,6 @@ public:
 		FreeAllocArray(m_assetData);
 		FreeAllocVar(m_modelParsed);
 		FreeAllocVar(m_modelLoose);
-		FreeAllocVar(m_modelDrawData);
 
 		if (m_numModelSkinNames)
 		{
@@ -93,17 +92,10 @@ public:
 	inline ModelParsedData_t* const GetParsedData() const { return m_modelParsed; }
 	inline StudioLooseData_t* const GetLooseData() const { return m_modelLoose; }
 	inline const char* const GetName() const { return m_modelName; }
+	inline char* const GetNameData() const { return m_modelName; }
 	inline const int GetSequenceCount() const { return m_numSequences; }
 	inline const uint64_t GetSequenceGUID(const int index) const { return m_sequences[index]; }
 	inline const std::vector<ModelBone_t>* const GetRig() const { return m_modelParsed ? &m_modelParsed->bones : nullptr; }
-	inline CDXDrawData* const GetDrawData() const { return m_modelDrawData; }
-
-	inline void AllocateDrawData(const uint64_t lod)
-	{
-		m_modelDrawData = new CDXDrawData();
-		m_modelDrawData->meshBuffers.resize(m_modelParsed->lods.at(lod).meshes.size());
-		m_modelDrawData->modelName = m_modelName;
-	}
 
 	void FixupSkinData();
 
@@ -113,7 +105,6 @@ private:
 
 	ModelParsedData_t* m_modelParsed;
 	StudioLooseData_t* m_modelLoose;
-	CDXDrawData* m_modelDrawData;
 	char* m_modelName;
 
 	char** m_modelSkinNames;
@@ -126,13 +117,14 @@ private:
 class CSourceSequenceAsset : public CAsset
 {
 public:
-	CSourceSequenceAsset(const CSourceModelAsset* const rigAsset, void* data, const std::string& name)
+	CSourceSequenceAsset(const CSourceModelAsset* const rigAsset, const void* const data, const std::string& name)
 	{
 		SetRigGUID(rigAsset->GetAssetGUID());
 		SetContainerFile(rigAsset->GetContainerFile<CSourceModelSource>());
 		SetAssetVersion(rigAsset->GetAssetVersion());
 
-		SetInternalAssetData(data);
+		SetInternalAssetData(nullptr); // not used not const!
+		SetAssetSequenceData(data);
 		SetAssetName(name);
 		SetAssetGUID(RTech::StringToGuid(name.c_str()));
 
@@ -149,22 +141,26 @@ public:
 	uint32_t GetAssetType() const { return 'qes'; }
 	const ContainerType GetAssetContainerType() const { return ContainerType::MDL; }
 	std::string GetContainerFileName() const { return static_cast<CSourceModelSource*>(m_containerFile)->GetFileName(); }
+	const void* GetInternalAssetData() { return nullptr; }  // not used not const!
 
-	const void* GetInternalAssetData() { return m_assetData; }
-	const uint64_t GetAssetGUID() const { return m_assetGuid; }
-	seqdesc_t* const GetSequence() const { return m_sequence; }
-	const std::vector<ModelBone_t>* GetRig() { return m_rig; }
-	const uint64_t GetRigGUID() const { return m_rigGuid; }
+	inline const void* GetSequenceData() const { return m_assetSequenceData; }
+	inline const uint64_t GetAssetGUID() const { return m_assetGuid; }
+	inline seqdesc_t* const GetSequence() const { return m_sequence; }
+	inline const std::vector<ModelBone_t>* GetRig() { return m_rig; }
+	inline const uint64_t GetRigGUID() const { return m_rigGuid; }
 
-	void SetAssetGUID(const uint64_t guid) { m_assetGuid = guid; }
-	void SetSequence(seqdesc_t* const seqdesc) { m_sequence = seqdesc; }
-	void SetRig(const std::vector<ModelBone_t>* rig) { m_rig = rig; }
+	inline void SetAssetSequenceData(const void* data) { m_assetSequenceData = data; }
+	inline void SetAssetGUID(const uint64_t guid) { m_assetGuid = guid; }
+	inline void SetSequence(seqdesc_t* const seqdesc) { m_sequence = seqdesc; }
+	inline void SetRig(const std::vector<ModelBone_t>* rig) { m_rig = rig; }
 
 	// anim data
 	void SetParsed() { m_animationParsed = true; }
 	const bool IsParsed() const { return m_animationParsed; }
 
 private:
+	const void* m_assetSequenceData;
+
 	uint64_t m_assetGuid;
 	seqdesc_t* m_sequence;
 	bool m_animationParsed;

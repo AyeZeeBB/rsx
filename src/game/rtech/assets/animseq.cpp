@@ -39,6 +39,7 @@ void LoadAnimSeqAsset(CAssetContainer* const container, CAsset* const asset)
 		break;
 	}
 	case eSeqVersion::VERSION_8:
+	case eSeqVersion::VERSION_9:
 	case eSeqVersion::VERSION_10:
 	case eSeqVersion::VERSION_11:
 	case eSeqVersion::VERSION_12:

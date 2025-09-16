@@ -1,6 +1,6 @@
 #pragma once
 
-static constexpr size_t managedBufferSize = (1024 * 1024 * 16);
+static constexpr size_t managedBufferSize = (1024 * 1024 * 32);
 
 // do it this way as allocating big memory blocks over and over is expensive
 struct CManagedBuffer

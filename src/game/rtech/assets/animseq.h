@@ -64,6 +64,7 @@ enum class eSeqVersion : int
 	VERSION_7,
 	VERSION_7_1,
 	VERSION_8,
+	VERSION_9,
 	VERSION_10,
 	VERSION_11,
 	VERSION_12,
@@ -73,6 +74,7 @@ static const std::map<int, eSeqVersion> s_seqVersionMap
 {
 	{ 7, eSeqVersion::VERSION_7 },
 	{ 8, eSeqVersion::VERSION_8 },
+	{ 9, eSeqVersion::VERSION_9 },
 	{ 10, eSeqVersion::VERSION_10 },
 	{ 11, eSeqVersion::VERSION_11 },
 	{ 12, eSeqVersion::VERSION_12 },
@@ -317,7 +319,7 @@ private:
 			if (anim->flags & ANIM_VALID && !(anim->flags & ANIM_ALLZEROS))
 			{
 				int sectionlength;
-				const uint8_t* boneFlagArray = useDatapointAnim ? reinterpret_cast<uint8_t*>(anim->pAnimdataStall_DP(&lastFrame, &sectionlength)) : reinterpret_cast<uint8_t*>(anim->pAnimdataStall(&lastFrame));
+				const uint8_t* const boneFlagArray = useDatapointAnim ? reinterpret_cast<const uint8_t* const>(anim->pAnimdataStall_DP(&lastFrame, &sectionlength)) : reinterpret_cast<const uint8_t* const>(anim->pAnimdataStall(&lastFrame));
 
 				const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount)]);
 

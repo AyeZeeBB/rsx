@@ -4,6 +4,7 @@
 #include <core/mdl/rmax.h>
 #include <core/mdl/cast.h>
 #include <core/mdl/smd.h>
+#include <core/mdl/qc.h>
 
 //#include <core/render/dx.h>
 //#include <thirdparty/imgui/imgui.h>
@@ -12,6 +13,7 @@
 extern CDXParentHandler* g_dxHandler;
 extern CBufferManager g_BufferManager;
 extern ExportSettings_t g_ExportSettings;
+extern CPreviewDrawData g_currentPreviewDrawData;
 
 //
 // PARSEDDATA
@@ -340,7 +342,9 @@ void ParseModelBoneData_v8(ModelParsedData_t* const parsedData)
 	parsedData->bones.resize(pStudioHdr->boneCount);
 
 	for (int i = 0; i < pStudioHdr->boneCount; i++)
+	{
 		parsedData->bones.at(i) = ModelBone_t(&bones[i]);
+	}
 }
 
 void ParseModelBoneData_v12_1(ModelParsedData_t* const parsedData)
@@ -351,7 +355,9 @@ void ParseModelBoneData_v12_1(ModelParsedData_t* const parsedData)
 	parsedData->bones.resize(pStudioHdr->boneCount);
 
 	for (int i = 0; i < pStudioHdr->boneCount; i++)
+	{
 		parsedData->bones.at(i) = ModelBone_t(&bones[i]);
+	}
 }
 
 void ParseModelBoneData_v16(ModelParsedData_t* const parsedData)
@@ -404,6 +410,32 @@ void ParseModelAttachmentData_v16(ModelParsedData_t* const parsedData)
 	for (int i = 0; i < pStudioHdr->localAttachmentCount; i++)
 	{
 		parsedData->attachments.emplace_back(pAttachments + i);
+	}
+}
+
+void ParseModelHitboxData_v8(ModelParsedData_t* const parsedData)
+{
+	const studiohdr_generic_t* const pStudioHdr = parsedData->pStudioHdr();
+	const mstudiohitboxset_t* const pHitboxSets = reinterpret_cast<const mstudiohitboxset_t* const>(pStudioHdr->baseptr + pStudioHdr->hitboxSetOffset);
+
+	parsedData->hitboxsets.reserve(pStudioHdr->hitboxSetCount);
+
+	for (int i = 0; i < pStudioHdr->hitboxSetCount; i++)
+	{
+		parsedData->hitboxsets.emplace_back(pHitboxSets + i, pHitboxSets->pHitbox<r5::mstudiobbox_v8_t>(0));
+	}
+}
+
+void ParseModelHitboxData_v16(ModelParsedData_t* const parsedData)
+{
+	const studiohdr_generic_t* const pStudioHdr = parsedData->pStudioHdr();
+	const r5::mstudiohitboxset_v16_t* const pHitboxSets = reinterpret_cast<const r5::mstudiohitboxset_v16_t* const>(pStudioHdr->baseptr + pStudioHdr->hitboxSetOffset);
+
+	parsedData->hitboxsets.reserve(pStudioHdr->hitboxSetCount);
+
+	for (int i = 0; i < pStudioHdr->hitboxSetCount; i++)
+	{
+		parsedData->hitboxsets.emplace_back(pHitboxSets + i);
 	}
 }
 
@@ -501,6 +533,81 @@ void ParseModelSequenceData_NoStall(ModelParsedData_t* const parsedData, char* c
 	}
 }
 
+void ParseModelAnimTypes_V8(ModelParsedData_t* const parsedData)
+{
+	const studiohdr_generic_t* const pStudioHdr = parsedData->pStudioHdr();
+
+	if (pStudioHdr->ikChainCount > 0)
+	{
+		parsedData->ikchains = new ModelIKChain_t[pStudioHdr->ikChainCount];
+		const r5::mstudioikchain_v8_t* const ikchains = reinterpret_cast<const r5::mstudioikchain_v8_t* const>(pStudioHdr->baseptr + pStudioHdr->ikChainOffset);
+
+		for (int i = 0; i < pStudioHdr->ikChainCount; i++)
+		{
+			const ModelIKChain_t ikchain(ikchains + i);
+			memcpy_s(parsedData->ikchains + i, sizeof(ModelIKChain_t), &ikchain, sizeof(ModelIKChain_t));
+		}
+	}
+
+	if (pStudioHdr->localPoseParamCount > 0)
+	{
+		parsedData->poseparams = new ModelPoseParam_t[pStudioHdr->localPoseParamCount];
+		const mstudioposeparamdesc_t* const poseparams = reinterpret_cast<const mstudioposeparamdesc_t* const>(pStudioHdr->baseptr + pStudioHdr->localPoseParamOffset);
+
+		for (int i = 0; i < pStudioHdr->localPoseParamCount; i++)
+		{
+			const ModelPoseParam_t poseparam(poseparams + i);
+			memcpy_s(parsedData->poseparams + i, sizeof(ModelPoseParam_t), &poseparam, sizeof(ModelPoseParam_t));
+		}
+	}
+
+	// technically supported but never used
+	/*if (pStudioHdr->localIkAutoPlayLockCount > 0)
+	{
+		printf("wooowowww~~!! iklocks in: %s\n", pStudioHdr->pszName());
+
+		parsedData->iklocks = new ModelIKLock_t[pStudioHdr->localIkAutoPlayLockCount];
+		const r5::mstudioiklock_v8_t* const iklocks = reinterpret_cast<const r5::mstudioiklock_v8_t* const>(pStudioHdr->baseptr + pStudioHdr->localIkAutoPlayLockOffset);
+
+		for (int i = 0; i < pStudioHdr->localIkAutoPlayLockCount; i++)
+		{
+			const ModelIKLock_t iklock(iklocks + i);
+			memcpy_s(parsedData->iklocks + i, sizeof(ModelIKLock_t), &iklock, sizeof(ModelIKLock_t));
+		}
+	}*/
+}
+
+void ParseModelAnimTypes_V16(ModelParsedData_t* const parsedData)
+{
+	const studiohdr_generic_t* const pStudioHdr = parsedData->pStudioHdr();
+
+	if (pStudioHdr->ikChainCount > 0)
+	{
+		parsedData->ikchains = new ModelIKChain_t[pStudioHdr->ikChainCount];
+		const r5::mstudioikchain_v16_t* const ikchains = reinterpret_cast<const r5::mstudioikchain_v16_t* const>(pStudioHdr->baseptr + pStudioHdr->ikChainOffset);
+
+		for (int i = 0; i < pStudioHdr->ikChainCount; i++)
+		{
+			const ModelIKChain_t ikchain(ikchains + i);
+			memcpy_s(parsedData->ikchains + i, sizeof(ModelIKChain_t), &ikchain, sizeof(ModelIKChain_t));
+		}
+	}
+
+	if (pStudioHdr->localPoseParamCount > 0)
+	{
+		parsedData->poseparams = new ModelPoseParam_t[pStudioHdr->localPoseParamCount];
+		const r5::mstudioposeparamdesc_v16_t* const poseparams = reinterpret_cast<const r5::mstudioposeparamdesc_v16_t* const>(pStudioHdr->baseptr + pStudioHdr->localPoseParamOffset);
+
+		for (int i = 0; i < pStudioHdr->localPoseParamCount; i++)
+		{
+			const ModelPoseParam_t poseparam(poseparams + i);
+			memcpy_s(parsedData->poseparams + i, sizeof(ModelPoseParam_t), &poseparam, sizeof(ModelPoseParam_t));
+		}
+	}
+
+	// no global iklocks in v16 and later	
+}
+
 void ParseAnimDesc_Origin(animdesc_t* const animdesc, CAnimData& animData, bool(*Studio_AnimPosition)(const animdesc_t* const, float, Vector&, QAngle&))
 {
 	// [rika]: adjust the origin bone
@@ -588,8 +695,7 @@ void ParseAnimDesc_R2(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 		const float s = (fFrame - static_cast<float>(iFrame));
 
 		int iLocalFrame = iFrame;
-
-		//const r2::mstudio_rle_anim_t* panim = reinterpret_cast<const r2::mstudio_rle_anim_t*>(animdesc->pAnimdataNoStall(&iLocalFrame));
+		const r2::mstudio_rle_anim_t* const panimstart = reinterpret_cast<const r2::mstudio_rle_anim_t*>(animdesc->pAnimdataNoStall(&iLocalFrame));
 
 		for (int bone = 0; bone < boneCount; bone++)
 		{
@@ -597,7 +703,7 @@ void ParseAnimDesc_R2(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 			Quaternion q;
 			Vector scale;
 
-			const r2::mstudio_rle_anim_t* panim = reinterpret_cast<const r2::mstudio_rle_anim_t*>(animdesc->pAnimdataNoStall(&iLocalFrame));
+			const r2::mstudio_rle_anim_t* panim = panimstart;
 			
 			// [rika]: titanfall 2 cycles through all the bone headers to get right one for a given bone
 			// [rika]: handle like the game since sometimes there can be blocks of bone headers with '0xff' bone id (if my memory serves me)
@@ -610,12 +716,12 @@ void ParseAnimDesc_R2(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 					break;
 			}
 
-			// r2 animations will always have position
-			uint8_t boneFlags = CAnimDataBone::ANIMDATA_POS;
+			uint8_t boneFlags = 0u;
 
 			if (panim && panim->bone == bone)
 			{
-				boneFlags |= (panim->flags & r2::RleFlags_t::STUDIO_ANIM_NOROT ? 0 : CAnimDataBone::ANIMDATA_ROT) | (seqdesc->flags & eStudioAnimFlags::ANIM_SCALE ? CAnimDataBone::ANIMDATA_SCL : 0);
+				// r2 animations will always have position
+				boneFlags |= CAnimDataBone::ANIMDATA_POS | (panim->flags & r2::RleFlags_t::STUDIO_ANIM_NOROT ? 0 : CAnimDataBone::ANIMDATA_ROT) | (seqdesc->flags & eStudioAnimFlags::ANIM_SCALE ? CAnimDataBone::ANIMDATA_SCL : 0);
 
 				// need to add a bool here, we do not want the interpolated values (inbetween frames)
 				r2::CalcBonePosition(iLocalFrame, s, pStudioHdr->pBone(panim->bone), pStudioHdr->pLinearBones(), panim, pos);
@@ -624,8 +730,6 @@ void ParseAnimDesc_R2(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 			}
 			else
 			{
-				boneFlags = 0x0;
-
 				pos = positions[bone];
 				q = quats[bone];
 				scale = scales[bone];
@@ -658,7 +762,7 @@ void ParseSeqDesc_R2(seqdesc_t* const seqdesc, const std::vector<ModelBone_t>* c
 	}
 }
 
-void ParseAnimDesc_R5(seqdesc_t* const seqdesc, animdesc_t* const animdesc, const std::vector<ModelBone_t>* const bones, char* (animdesc_t::* pAnimdata)(int* const) const)
+void ParseAnimDesc_R5(seqdesc_t* const seqdesc, animdesc_t* const animdesc, const std::vector<ModelBone_t>* const bones, AnimdataFunc_t pAnimdata)
 {
 	const int boneCount = static_cast<int>(bones->size());
 
@@ -723,7 +827,7 @@ void ParseAnimDesc_R5(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 			int iLocalFrame = iFrame;
 
 			int sectionlength = 0;
-			const uint8_t* boneFlagArray = reinterpret_cast<uint8_t*>(animdesc->pAnimdataStall_DP(&iLocalFrame, &sectionlength));
+			const uint8_t* const boneFlagArray = reinterpret_cast<const uint8_t* const>(animdesc->pAnimdataStall_DP(&iLocalFrame, &sectionlength));
 			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount)]);
 
 			for (int bone = 0; bone < boneCount; bone++)
@@ -784,7 +888,7 @@ void ParseAnimDesc_R5(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 
 			int iLocalFrame = iFrame;
 
-			const uint8_t* boneFlagArray = reinterpret_cast<uint8_t*>((animdesc->*pAnimdata)(&iLocalFrame));
+			const uint8_t* const boneFlagArray = reinterpret_cast<const uint8_t* const>((animdesc->*pAnimdata)(&iLocalFrame));
 			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount)]);
 
 			for (int bone = 0; bone < boneCount; bone++)
@@ -850,7 +954,7 @@ void ParseSeqDesc_R5(seqdesc_t* const seqdesc, const std::vector<ModelBone_t>* c
 	assertm(static_cast<uint8_t>(CAnimDataBone::ANIMDATA_ROT) == static_cast<uint8_t>(r5::RleBoneFlags_t::STUDIO_ANIM_ROT), "flag mismatch");
 	assertm(static_cast<uint8_t>(CAnimDataBone::ANIMDATA_SCL) == static_cast<uint8_t>(r5::RleBoneFlags_t::STUDIO_ANIM_SCALE), "flag mismatch");
 
-	char* (animdesc_t::*pAnimdata)(int* const) const = useStall ? &animdesc_t::pAnimdataStall : &animdesc_t::pAnimdataNoStall;
+	AnimdataFunc_t pAnimdata = useStall ? &animdesc_t::pAnimdataStall : &animdesc_t::pAnimdataNoStall;
 
 	for (int i = 0; i < seqdesc->AnimCount(); i++)
 	{
@@ -1020,6 +1124,7 @@ const size_t CAnimData::ToMemory(char* const buf)
 //
 // EXPORT SETTINGS
 //
+
 struct ModelMaterialExport_t
 {
 	ModelMaterialExport_t(MaterialAsset* const material, const int materialId) : asset(material), id(materialId) {}
@@ -1529,6 +1634,7 @@ bool ExportModelCast(const ModelParsedData_t* const parsedData, std::filesystem:
 	return true;
 }
 
+// parse a Vertex_t into a smd vertex
 inline void ParseVertexIntoSMD(const Vertex_t* const srcVert, const VertexWeight_t* const srcWeights, smd::Vertex* const vert, const bool isStaticProp)
 {
 	vert->position = srcVert->position;
@@ -1555,6 +1661,7 @@ inline void ParseVertexIntoSMD(const Vertex_t* const srcVert, const VertexWeight
 	}
 }
 
+// export parsed data into smd files
 bool ExportModelSMD(const ModelParsedData_t* const parsedData, std::filesystem::path& exportPath)
 {
 	std::string fileNameBase = exportPath.stem().string();
@@ -1587,6 +1694,8 @@ bool ExportModelSMD(const ModelParsedData_t* const parsedData, std::filesystem::
 
 	const bool isStaticProp = parsedData->studiohdr.flags & STUDIOHDR_FLAGS_STATIC_PROP ? true : false;
 
+	CManagedBuffer* const buf = g_BufferManager.ClaimBuffer();
+
 	for (size_t lodIdx = 0; lodIdx < parsedData->lods.size(); lodIdx++)
 	{
 		const ModelLODData_t& lod = parsedData->lods.at(lodIdx);
@@ -1596,6 +1705,8 @@ bool ExportModelSMD(const ModelParsedData_t* const parsedData, std::filesystem::
 			std::string name(model.name);
 			FixupExportLodNames(name, static_cast<int>(lodIdx));
 
+			// unique prefix so we don't overwrite files
+			name = std::format("{}_{}", fileNameBase, name);
 			smd->SetName(name);
 
 			for (uint32_t meshIdx = 0; meshIdx < model.meshCount; meshIdx++)
@@ -1614,20 +1725,13 @@ bool ExportModelSMD(const ModelParsedData_t* const parsedData, std::filesystem::
 				// [rika]: add more triangles
 				smd->AddTriangles(static_cast<size_t>(meshData.indexCount / 3));
 
-				const char* material = nullptr;
 				const ModelMaterialData_t* const materialData = parsedData->pMaterial(meshData.materialId);
 
 				// [rika]: making the choice to use the stored rmdl name here when possible, as that is what it was likely compiled with
-				material = materialData->name;
-				assertm(material, "material name should always be valid regardless");
+				const char* material = materialData->GetName(true);
+				assertm(material, "material name should always be valid");
 
-				// [rika]: try to use a material asset name if our (r)mdl doesn't have names stored
-				if (materialData->asset && materialData->stored)
-				{
-					material = materialData->GetMaterialAsset()->name;
-				}
-
-				material = g_ExportSettings.exportPathsFull ? material : keepAfterLastSlashOrBackslash(material);
+				material = g_ExportSettings.exportModelMatsTruncated ? material : keepAfterLastSlashOrBackslash(material);
 
 				for (uint32_t indiceIdx = 0; indiceIdx < meshData.indexCount; indiceIdx += 3)
 				{
@@ -1640,12 +1744,650 @@ bool ExportModelSMD(const ModelParsedData_t* const parsedData, std::filesystem::
 				}
 			}
 
-			smd->Write();
+			smd->Write(buf->Buffer(), managedBufferSize);
 			smd->ResetMeshData();
 		}
 	}
 
 	FreeAllocVar(smd);
+	g_BufferManager.RelieveBuffer(buf);
+
+	return true;
+}
+
+// get the used material indices for skins
+// todo: move to qc
+const uint32_t QC_GetUsedSkinIndices(const int16_t* const skins, const int numSkinRef, const int numSkinFamilies, int16_t* const indices)
+{
+	// [rika]: no actual skins, just base materials
+	assertm(numSkinFamilies >= 2, "model had no additional skins");
+
+	memset(indices, 0xff, sizeof(int16_t) * numSkinRef);
+
+	const int16_t* skinGroup = skins + numSkinRef;
+
+	// [rika]: parse through each skingroup to see which indices changed
+	// todo: setting to skip this and write all materials
+	for (int family = 0; family < numSkinFamilies - 1; family++)
+	{
+		for (int material = 0; material < numSkinRef; material++)
+		{
+			if (skins[material] == skinGroup[material])
+				continue;
+
+			indices[material] = static_cast<int16_t>(material);
+		}
+
+		skinGroup += numSkinRef;
+	}
+
+	// [rika]: make our indices sequential
+	uint32_t curIdx = 0;
+	for (int i = 0; i < numSkinRef; i++)
+	{
+		if (indices[i] == -1)
+			continue;
+
+		indices[curIdx] = indices[i];
+		curIdx++;
+	}
+
+	return curIdx;
+}
+
+// parse qc commands from header
+void QC_ParseStudioHeader(qc::QCFile* const qc, const ModelParsedData_t* const parsedData, const int version)
+{
+	using namespace qc;
+
+	const studiohdr_generic_t* const pStudioHdr = parsedData->pStudioHdr();
+
+	CmdParse(qc, QC_MODELNAME, pStudioHdr->pszName());
+	CmdParse(qc, QC_CONTENTS, &pStudioHdr->contents);
+	CmdParse(qc, QC_SURFACEPROP, pStudioHdr->pszSurfaceProp());
+
+	// [rika]: flag based options
+	if (pStudioHdr->flags & STUDIOHDR_FLAGS_STATIC_PROP)
+		CmdParse(qc, QC_STATICPROP, nullptr);
+
+	if (version < 52)
+	{
+		if (pStudioHdr->flags & STUDIOHDR_FLAGS_FORCE_OPAQUE)
+		{
+			assertm(!(pStudioHdr->flags & STUDIOHDR_FLAGS_TRANSLUCENT_TWOPASS), "translucent and opaque");
+			CmdParse(qc, QC_OPAQUE, nullptr);
+		}
+
+		// removed in r1, parsed from materials. flag replaced in r5, used by arms and loading models a lot!
+		if (pStudioHdr->flags & STUDIOHDR_FLAGS_TRANSLUCENT_TWOPASS)
+		{
+			assertm(!(pStudioHdr->flags & STUDIOHDR_FLAGS_FORCE_OPAQUE), "translucent and opaque");
+			CmdParse(qc, QC_MOSTLYOPAQUE, nullptr);
+		}
+	}
+	else
+	{
+		// [rika]: pretty sure this one is still supported!
+		if (pStudioHdr->flags & STUDIOHDR_FLAGS_FORCE_OPAQUE)
+		{
+			CmdParse(qc, QC_OPAQUE, nullptr);
+		}
+	}
+
+	if (version != 54 && pStudioHdr->flags & STUDIOHDR_FLAGS_OBSOLETE)
+	{
+		CmdParse(qc, QC_OBSOLETE, nullptr);
+	}
+
+	if (pStudioHdr->flags & STUDIOHDR_FLAGS_NO_FORCED_FADE)
+	{
+		CmdParse(qc, QC_NOFORCEDFADE, nullptr);
+	}
+
+	if (pStudioHdr->flags & STUDIOHDR_FLAGS_FORCE_PHONEME_CROSSFADE)
+	{
+		CmdParse(qc, QC_FORCEPHONEMECROSSFADE, nullptr);
+	}
+
+	if (pStudioHdr->flags & STUDIOHDR_FLAGS_CONSTANT_DIRECTIONAL_LIGHT_DOT)
+	{
+		CmdParse(qc, QC_CONSTANTDIRECTIONALLIGHT, &pStudioHdr->constdirectionallightdot);
+	}
+	
+	// believe this is different later seasons 
+	if (pStudioHdr->flags & STUDIOHDR_FLAGS_AMBIENT_BOOST)
+	{
+		CmdParse(qc, QC_AMBIENTBOOST, nullptr);
+	}
+
+	if (pStudioHdr->flags & STUDIOHDR_FLAGS_DO_NOT_CAST_SHADOWS)
+	{
+		CmdParse(qc, QC_DONOTCASTSHADOWS, nullptr);
+	}
+
+	// believe this is different later seasons (used on non static props)
+	if (pStudioHdr->flags & STUDIOHDR_FLAGS_CAST_TEXTURE_SHADOWS)
+	{
+		CmdParse(qc, QC_CASTTEXTURESHADOWS, nullptr);
+	}
+
+	if (version != 54 && pStudioHdr->flags & STUDIOHDR_FLAGS_SUBDIVISION_SURFACE)
+	{
+		CmdParse(qc, QC_SUBD, nullptr);
+	}
+
+	CmdParse(qc, QC_FADEDISTANCE, &pStudioHdr->fadeDistance);
+
+	CmdParse(qc, QC_EYEPOSITION, &pStudioHdr->eyeposition, 3);
+
+	if (pStudioHdr->flMaxEyeDeflection != 0.0f)
+	{
+		CmdParse(qc, QC_MAXEYEDEFLECTION, &pStudioHdr->flMaxEyeDeflection);
+	}
+
+	if (pStudioHdr->numSkinRef > 0)
+	{
+		const char** materials = new const char*[pStudioHdr->numSkinRef]{};
+		const char** materialFullPaths = nullptr;
+
+		// if we are going to rename materials
+		if (g_ExportSettings.exportModelMatsTruncated)
+		{
+			materialFullPaths = new const char*[pStudioHdr->numSkinRef]{};
+		}
+
+		for (int i = 0; i < pStudioHdr->numSkinRef; i++)
+		{
+			materials[i] = parsedData->pMaterial(i)->GetName(true);
+
+			// are the materials getting shortened ?
+			if (!g_ExportSettings.exportModelMatsTruncated)
+				continue;
+
+			assertm(materialFullPaths, "material path array was not allocated");
+
+			materialFullPaths[i] = materials[i];
+			materials[i] = keepAfterLastSlashOrBackslash(materials[i]);
+		}
+
+		if (pStudioHdr->numSkinFamilies > 1)
+		{
+			const int16_t* const skins = pStudioHdr->pSkinref(0);
+			int16_t* const indices = new int16_t[pStudioHdr->numSkinRef]{};
+
+			const uint32_t usedIndices = QC_GetUsedSkinIndices(skins, pStudioHdr->numSkinRef, pStudioHdr->numSkinFamilies, indices);
+
+			const TextureGroupData_t texturegroup(materials, skins, indices, pStudioHdr->numSkinRef, pStudioHdr->numSkinFamilies, usedIndices);
+			CmdParse(qc, QC_TEXTUREGROUP, &texturegroup);
+
+			FreeAllocArray(indices);
+		}
+
+		if(g_ExportSettings.exportModelMatsTruncated)
+		{
+			for (int i = 0; i < pStudioHdr->numSkinRef; i++)
+			{
+				const CommandOptionPair_t renameData(materials[i], materialFullPaths[i]);
+				CmdParse(qc, QC_RENAMEMATERIAL, &renameData);
+			}
+		}
+
+		FreeAllocArray(materials);
+		FreeAllocArray(materialFullPaths);
+	}
+
+	// [rika]: most models will have at least one (unless it's retail apex), it will be the path prefixing 'mdl' or 'models', in most cases this is just an empty string
+	for (int i = 0; i < pStudioHdr->cdTexturesCount; i++)
+		CmdParse(qc, QC_CDMATERIALS, pStudioHdr->pCdtexture(i));
+
+	if (pStudioHdr->keyValueSize > 0 || (pStudioHdr->keyValueOffset && pStudioHdr->keyValueSize == -1))
+		CmdParse(qc, QC_KEYVALUES, pStudioHdr->KeyValueText());
+
+	if (pStudioHdr->numAllowedRootLODs > 0)
+		CmdParse(qc, QC_ALLOWROOTLODS, &pStudioHdr->numAllowedRootLODs);
+	
+	if (pStudioHdr->rootLOD > 0)
+		CmdParse(qc, QC_MINLOD, &pStudioHdr->rootLOD);
+}
+
+void QC_ParseStudioBone(qc::QCFile* const qc, const ModelParsedData_t* const parsedData, const ModelBone_t* const bone, const int version)
+{
+	using namespace qc;
+
+	const studiohdr_generic_t* const pStudioHdr = parsedData->pStudioHdr();
+
+	// [rika]: parse out the data required for a $definebone (and other) command(s)
+	const char* const parent = bone->parent > -1 ? parsedData->pBone(bone->parent)->pszName() : nullptr;
+	const matrix3x4_t* pPostTransform = nullptr;
+
+	// [rika]: get data for fixups if it exits
+	if (pStudioHdr->srcBoneTransformCount)
+	{
+		const mstudiosrcbonetransform_t* const pSrcBoneTransform = GetSrcBoneTransform(bone->name, pStudioHdr->pSrcBoneTransform(0), pStudioHdr->srcBoneTransformCount);
+
+		if (pSrcBoneTransform)
+			pPostTransform = &pSrcBoneTransform->posttransform;
+	}
+
+	const BoneData_t boneData(bone->pszName(), parent/*, bone->pszSurfaceProp()*/, bone->contents, &bone->pos, &bone->rot, pPostTransform);
+	const CommandOptionPair_t boneSurface(bone->pszName(), bone->pszSurfaceProp());
+
+	CmdParse(qc, QC_DEFINEBONE, &boneData);
+
+	// THESE NEED NAMES, save data in DefineBoneData_t and pass to these funcs
+	CmdParse(qc, QC_JOINTCONTENTS, &boneData);
+	CmdParse(qc, QC_JOINTSURFACEPROP, &boneSurface);
+
+	if (bone->flags & BONE_USED_BY_BONE_MERGE)
+	{
+		CmdParse(qc, QC_BONEMERGE, bone->pszName());
+	}
+
+	if (bone->proctype > 0)
+	{
+		switch (bone->proctype)
+		{
+		case STUDIO_PROC_JIGGLE:
+		{
+			JiggleData_t* jiggleData = nullptr;
+
+			if (version == 54)
+			{
+				const r5::mstudiojigglebone_v8_t* const jigglebone = reinterpret_cast<const r5::mstudiojigglebone_v8_t* const>(bone->pProcedure());
+
+				jiggleData = new JiggleData_t(bone->pszName(), jigglebone->flags);
+
+				// todo: just do this in the constructor (I was lazy tonight)
+				jiggleData->FixFlagsApex(); // not ideal but will work for now
+				jiggleData->SetGeneral(jigglebone->length, jigglebone->tipMass, jigglebone->tipFriction);
+				jiggleData->SetFlexible(jigglebone->yawStiffness, jigglebone->yawDamping, jigglebone->pitchStiffness, jigglebone->pitchDamping, jigglebone->alongStiffness, jigglebone->alongDamping);
+				jiggleData->SetAngleConstraint(jigglebone->angleLimit);
+				jiggleData->SetYawConstraint(jigglebone->minYaw, jigglebone->maxYaw, jigglebone->yawFriction, jigglebone->yawBounce);
+				jiggleData->SetPitchConstraint(jigglebone->minPitch, jigglebone->maxPitch, jigglebone->pitchFriction, jigglebone->pitchBounce);
+				jiggleData->SetBaseSpring(jigglebone->baseMass, jigglebone->baseStiffness, jigglebone->baseDamping, jigglebone->baseMinLeft, jigglebone->baseMaxLeft, jigglebone->baseLeftFriction,
+					jigglebone->baseMinUp, jigglebone->baseMaxUp, jigglebone->baseUpFriction, jigglebone->baseMinForward, jigglebone->baseMaxForward, jigglebone->baseForwardFriction);
+			}
+			else
+			{
+				// temp
+				break;
+			}
+		
+			CmdParse(qc, QC_JIGGLEBONE, jiggleData);
+
+			FreeAllocVar(jiggleData);
+
+			break;
+		}
+		}
+	}
+}
+
+constexpr const char* const s_QCModelNameFormat = "%s_%s%s\0"; // file name, model name, extension
+static uint32_t s_QCMaxVerts = 0u;
+void QC_ParseStudioBodypart(qc::QCFile* const qc, const ModelParsedData_t* const parsedData, const ModelBodyPart_t* const bodypart, const char* const stem, const int setting)
+{
+	using namespace qc;
+
+	if (bodypart->numModels < 1)
+	{
+		assertm(false, "invalid model count");
+		return;
+	}
+
+	assertm(!parsedData->lods.empty(), "model had bodyparts but no lods");
+
+	const ModelLODData_t* const lodData0 = parsedData->pLOD(0);
+
+	char buf[MAX_PATH]{};
+
+	// single model
+	// handle $model (vertex anim) eventually
+	if (bodypart->numModels == 1)
+	{
+		const ModelModelData_t* const modelData = lodData0->pModel(bodypart->modelIndex);
+
+		std::string name(modelData->name);
+		FixupExportLodNames(name, 0);
+		snprintf(buf, MAX_PATH, s_QCModelNameFormat, stem, name.c_str(), s_ModelExportExtensions[setting]);
+
+		const CommandOptionPair_t bodyData(bodypart->GetNameCStr(), buf);
+
+		CmdParse(qc, QC_BODY, &bodyData, 1, true);
+
+		s_QCMaxVerts = modelData->vertCount > s_QCMaxVerts ? modelData->vertCount : s_QCMaxVerts;
+
+		return;
+	}
+
+	BodyGroupData_t bodyGroupData(bodypart->GetNameCStr(), bodypart->numModels);
+
+	for (uint32_t i = 0; i < static_cast<uint32_t>(bodypart->numModels); i++)
+	{
+		const ModelModelData_t* const modelData = lodData0->pModel(bodypart->modelIndex + i);
+
+		if (modelData->meshCount == 0)
+		{
+			bodyGroupData.SetBlank(i);
+			continue;
+		}
+
+		std::string name(modelData->name);
+		FixupExportLodNames(name, 0);
+		snprintf(buf, MAX_PATH, s_QCModelNameFormat, stem, name.c_str(), s_ModelExportExtensions[setting]);
+		
+		bodyGroupData.SetPart(qc, i, buf);
+
+		s_QCMaxVerts = modelData->vertCount > s_QCMaxVerts ? modelData->vertCount : s_QCMaxVerts;
+	}
+
+	CmdParse(qc, QC_BODYGROUP, &bodyGroupData, 1, true);
+}
+
+const uint32_t QC_ParseStudioLODBone(const ModelParsedData_t* const parsedData, const size_t lod, const uint32_t boneId)
+{
+	const ModelBone_t* const bone = parsedData->pBone(boneId);
+
+	// bone is used by this lod, don't replace
+	if (bone->flags & BONE_USED_BY_VERTEX_AT_LOD(lod))
+		return boneId;
+
+	if (bone->parent == -1)
+	{
+		assertm(false, "bone with no parent unused by LOD");
+		return boneId;
+	}
+
+	const uint32_t out = QC_ParseStudioLODBone(parsedData, lod, bone->parent);
+	return out;
+}
+
+void QC_ParseStudioLOD(qc::QCFile* const qc, const ModelParsedData_t* const parsedData, const size_t lod, const bool isShadowLOD, const char* const stem, const int setting)
+{
+	using namespace qc;
+
+	const ModelLODData_t* const lodData0 = parsedData->pLOD(lod);
+	const ModelLODData_t* const lodData = parsedData->pLOD(lod);
+	assertm(lodData->GetModelCount() == lodData0->GetModelCount(), "mismatched model count, very bad!");
+	
+	LodData_t lodGroupData(lodData->GetModelCount(), parsedData->BoneCount(), lodData->switchPoint, isShadowLOD);
+
+	// models
+	char bufBase[MAX_PATH]{};
+	char bufReplace[MAX_PATH]{};
+
+	for (uint32_t i = 0; i < static_cast<uint32_t>(lodData->GetModelCount()); i++)
+	{
+		const ModelModelData_t* const modelData0 = lodData0->pModel(i);
+		const ModelModelData_t* const modelData = lodData->pModel(i);
+
+		// blank model
+		if (modelData->vertCount == 0 && modelData0->vertCount == 0)
+			continue;
+
+		std::string base(modelData->name);
+		FixupExportLodNames(base, 0);
+		snprintf(bufBase, MAX_PATH, s_QCModelNameFormat, stem, base.c_str(), s_ModelExportExtensions[setting]);
+
+		if (modelData->vertCount == 0 && modelData0->vertCount > 0)
+		{
+			lodGroupData.RemoveModel(qc, i, bufBase);
+			continue;
+		}
+		
+		std::string replace(modelData->name);
+		FixupExportLodNames(replace, static_cast<int>(lod));
+		snprintf(bufReplace, MAX_PATH, s_QCModelNameFormat, stem, replace.c_str(), s_ModelExportExtensions[setting]);
+
+		lodGroupData.ReplaceModel(qc, i, bufBase, bufReplace);
+
+		s_QCMaxVerts = modelData->vertCount > s_QCMaxVerts ? modelData->vertCount : s_QCMaxVerts;
+	}
+
+	// bones
+	// [rika]: do we need to check for attachments ? I don't think we can remove a bone if it has attachments
+	for (uint32_t i = 0; i < static_cast<uint32_t>(parsedData->BoneCount()); i++)
+	{	
+		const uint32_t boneId = QC_ParseStudioLODBone(parsedData, lod, i);
+
+		if (boneId == i)
+			continue;
+
+		const ModelBone_t* const pBoneChild = parsedData->pBone(i);
+		const ModelBone_t* const pBoneParent = parsedData->pBone(boneId);
+
+		lodGroupData.ReplaceBone(i, pBoneChild->pszName(), pBoneParent->pszName());
+	}
+
+	if (lodGroupData.isShadowLOD && parsedData->pStudioHdr()->flags & STUDIOHDR_FLAGS_USE_SHADOWLOD_MATERIALS)
+		lodGroupData.useShadowLODMaterials = true;
+
+	const CommandList_t lodType = isShadowLOD ? QC_SHADOWLOD : QC_LOD;
+
+	CmdParse(qc, lodType, &lodGroupData);
+}
+
+void QC_ParseStudioAttachments(qc::QCFile* const qc, const ModelParsedData_t* const parsedData)
+{
+	using namespace qc;
+
+	const studiohdr_generic_t* const pStudioHdr = parsedData->pStudioHdr();
+
+	const bool staticProp = pStudioHdr->flags & STUDIOHDR_FLAGS_STATIC_PROP;
+	const bool useIllumAttachment = IllumPositionData_t::useAttachment(pStudioHdr->illumpositionattachmentindex);
+	size_t illumpositionattachmentindex = pStudioHdr->illumpositionattachmentindex - 1;
+
+	bool useAutoCenter = false;
+	//size_t autoCenterIndex = 0ull;
+
+	const size_t numAttachments = parsedData->attachments.size();
+	for (size_t i = 0; i < numAttachments; i++)
+	{
+		// skip __illumPosition attachment
+		if (useIllumAttachment && illumpositionattachmentindex == i)
+			continue;
+
+		const ModelAttachment_t* const attachment = parsedData->pAttachment(i);
+
+		// should we skip this
+		if (staticProp && !useAutoCenter && !strncmp("placementOrigin", attachment->name, 16))
+		{
+			useAutoCenter = true;
+			//autoCenterIndex = i;
+		}
+
+		// invalid index in apex (sometimes?), yippee!!!
+		if (useIllumAttachment && illumpositionattachmentindex >= numAttachments && !strncmp("__illumPosition", attachment->name, 16))
+		{
+			illumpositionattachmentindex = i;
+			continue;
+		}
+
+		const AttachmentData_t attachmentData(attachment->name, parsedData->pBone(attachment->localbone)->pszName(), attachment->flags, attachment->localmatrix);
+
+		CmdParse(qc, QC_ATTACHMENT, &attachmentData);
+	}
+
+	// illumposition
+	// [rika]: not a fan of this being done outside qc, but also don't wanna put out custom types into qc (supposed to be universial for [redacted])
+	{
+		const char* localbone = nullptr;
+		const matrix3x4_t* localmatrix = nullptr;
+
+		if (IllumPositionData_t::useAttachment(pStudioHdr->illumpositionattachmentindex))
+		{
+			const ModelAttachment_t* const pAttachment = parsedData->pAttachment(illumpositionattachmentindex); // use fixed index incase it is invalid
+
+			localbone = parsedData->pBone(pAttachment->localbone)->name;
+			localmatrix = pAttachment->localmatrix;
+		}
+
+		const IllumPositionData_t illumdata(&pStudioHdr->illumposition, pStudioHdr->illumpositionattachmentindex, localbone, localmatrix);
+
+		CmdParse(qc, QC_ILLUMPOSITION, &illumdata);
+	}
+
+	if (useAutoCenter)
+	{
+		CmdParse(qc, QC_AUTOCENTER, nullptr);
+	}
+}
+
+void QC_ParseStudioBoxes(qc::QCFile* const qc, const ModelParsedData_t* const parsedData)
+{
+	using namespace qc;
+
+	const studiohdr_generic_t* const pStudioHdr = parsedData->pStudioHdr();
+
+	const bool autoGeneratedHitbox = pStudioHdr->flags & STUDIOHDR_FLAGS_AUTOGENERATED_HITBOX;
+	bool skipBoneInBBox = false;
+
+	const CommandOptionPair_t bboxData(pStudioHdr->hull_min.Base(), pStudioHdr->hull_max.Base(), 3, 3);
+	CmdParse(qc, QC_BBOX, &bboxData);
+
+	const CommandOptionPair_t cboxData(pStudioHdr->view_bbmin.Base(), pStudioHdr->view_bbmax.Base(), 3, 3);
+	CmdParse(qc, QC_CBOX, &cboxData);
+
+	// [rika]: it's important to parse these in order
+	for (size_t i = 0; i < parsedData->hitboxsets.size(); i++)
+	{
+		const ModelHitboxSet_t* const hitboxSetData = parsedData->pHitboxSet(i);
+		CmdParse(qc, QC_HBOXSET, hitboxSetData->name, 1, false, autoGeneratedHitbox);
+
+		for (int boxIdx = 0; boxIdx < hitboxSetData->numHitboxes; boxIdx++)
+		{
+			const ModelHitbox_t* const hitboxData = hitboxSetData->hitboxes + boxIdx;
+			const Hitbox_t hboxData(parsedData->pBone(hitboxData->bone)->pszName(), hitboxData->group, hitboxData->bbmin, hitboxData->bbmax, hitboxData->name, hitboxData->forceCritPoint);
+
+			CmdParse(qc, QC_HBOX, &hboxData, 1, false, autoGeneratedHitbox);
+
+			// hgroup
+			if (autoGeneratedHitbox)
+			{
+				const CommandOptionPair_t hgroupData(hitboxData->group, parsedData->pBone(hitboxData->bone)->pszName());
+				CmdParse(qc, QC_HGROUP, &hgroupData);
+			}
+
+			if (autoGeneratedHitbox && !skipBoneInBBox)
+			{
+				const Vector& bbmin = *hitboxData->bbmin;
+				const Vector& bbmax = *hitboxData->bbmax;
+
+				for (uint32_t axis = 0; axis < 3; axis++)
+				{
+					skipBoneInBBox = bbmin[axis] > 0.0f || bbmax[axis] < 0.0f ? true : skipBoneInBBox;
+				}
+			}
+		}
+	}
+
+	if (skipBoneInBBox)
+	{
+		CmdParse(qc, QC_SKIPBONEINBBOX, nullptr);
+	}
+}
+
+void QC_ParseStudioAnimation(qc::QCFile* const qc, const ModelParsedData_t* const parsedData)
+{
+	using namespace qc;
+
+	const studiohdr_generic_t* const pStudioHdr = parsedData->pStudioHdr();
+
+	for (int i = 0; i < pStudioHdr->localPoseParamCount; i++)
+	{
+		assertm(parsedData->poseparams, "invalid pointer, wicked bad");
+
+		const ModelPoseParam_t* const poseParam = parsedData->poseparams + i;
+		const PoseParamData_t poseParamData(poseParam->name, poseParam->flags, poseParam->start, poseParam->end, poseParam->loop);
+		CmdParse(qc, QC_POSEPARAMETER, &poseParamData);
+	}
+
+	for (int i = 0; i < pStudioHdr->ikChainCount; i++)
+	{
+		assertm(parsedData->ikchains, "invalid pointer, wicked bad");
+
+		const ModelIKChain_t* const ikChain = parsedData->ikchains + i;
+		const IKChainData_t ikChainData(ikChain->name, parsedData->pBone(ikChain->links[ModelIKChain_t::IKLINK_FOOT].bone)->pszName(), &ikChain->links[ModelIKChain_t::IKLINK_THIGH].kneeDir, ikChain->unk_10);
+		CmdParse(qc, QC_IKCHAIN, &ikChainData);
+	}
+
+	for (int i = 0; i < pStudioHdr->localIkAutoPlayLockCount; i++)
+	{
+		assertm(parsedData->iklocks, "invalid pointer, wicked bad");
+
+		const ModelIKLock_t* const ikLock = parsedData->iklocks + i;
+		assertm(ikLock->chain < pStudioHdr->ikChainCount, "invaild ik chain index");
+
+		const IKLockData_t ikLockData(parsedData->ikchains[ikLock->chain].name, ikLock->flPosWeight, ikLock->flLocalQWeight);
+		CmdParse(qc, QC_IKAUTOPLAYLOCK, &ikLockData);
+	}
+
+
+
+	for (int i = 0; i < pStudioHdr->includeModelCount; i++)
+	{
+		const mstudiomodelgroup_t* const includemodel = reinterpret_cast<const mstudiomodelgroup_t* const>(pStudioHdr->baseptr + pStudioHdr->includeModelOffset) + i;
+		CmdParse(qc, QC_INCLUDEMODEL, includemodel->pszName());
+	}
+}
+
+bool ExportModelQC(const ModelParsedData_t* const parsedData, std::filesystem::path& exportPath, const int setting, const int version)
+{
+	if (!parsedData->studiohdr.baseptr)
+		return false;
+
+	const std::string fileStem(exportPath.stem().string());
+
+	CManagedBuffer* buf = g_BufferManager.ClaimBuffer();
+
+	qc::QCFile qc(exportPath, buf->Buffer(), managedBufferSize);
+
+	QC_ParseStudioHeader(&qc, parsedData, version);
+
+	for (int i = 0; i < parsedData->BoneCount(); i++)
+		QC_ParseStudioBone(&qc, parsedData, parsedData->pBone(i), version);
+
+	s_QCMaxVerts = 0u;
+	for (size_t i = 0; i < parsedData->bodyParts.size(); i++)
+		QC_ParseStudioBodypart(&qc, parsedData, parsedData->pBodypart(i), fileStem.c_str(), setting);
+
+	if (parsedData->lods.size() > 1)
+	{
+		for (size_t i = 1; i < parsedData->lods.size(); i++)
+		{
+			if (parsedData->pStudioHdr()->flags & STUDIOHDR_FLAGS_HASSHADOWLOD && parsedData->pLOD(i)->switchPoint == -1.0f)
+			{
+				QC_ParseStudioLOD(&qc, parsedData, i, true, fileStem.c_str(), setting);
+				continue;
+			}
+
+			QC_ParseStudioLOD(&qc, parsedData, i, false, fileStem.c_str(), setting);
+		}
+	}
+
+	s_QCMaxVerts++;
+	assertm(s_QCMaxVerts < s_MaxStudioVerts, "invalid max vert value");
+	if (s_QCMaxVerts > (s_MaxStudioVerts / 3))
+		qc::CmdParse(&qc, qc::QC_MAXVERTS, &s_QCMaxVerts);
+
+	// attachments
+	QC_ParseStudioAttachments(&qc, parsedData);
+
+	// boxes and boxes and boxes and
+	QC_ParseStudioBoxes(&qc, parsedData);
+
+	// animation and sequences
+	QC_ParseStudioAnimation(&qc, parsedData);
+
+	// get version from settings
+	qc::Version_t qcTargetVersion;
+	qcTargetVersion.SetVersion(static_cast<qc::MajorVersion_t>(g_ExportSettings.qcMajorVersion), g_ExportSettings.qcMinorVersion);
+
+	// export qc file
+	qc::QCFile::SetExportVersion(qcTargetVersion);
+	qc.ParseToText(false);
+
+	g_BufferManager.RelieveBuffer(buf);
 
 	return true;
 }
@@ -1876,6 +2618,8 @@ bool ExportSeqDescSMD(const seqdesc_t* const seqdesc, std::filesystem::path& exp
 	const Vector deltaPos(0.0f, 0.0f, 0.0f);
 	const Quaternion deltaQuat(0.0f, 0.0f, 0.0f, 1.0f);
 
+	CManagedBuffer* const buf = g_BufferManager.ClaimBuffer();
+
 	for (int animIdx = 0; animIdx < seqdesc->AnimCount(); animIdx++)
 	{
 		const animdesc_t* const animdesc = &seqdesc->anims.at(animIdx);
@@ -1928,10 +2672,11 @@ bool ExportSeqDescSMD(const seqdesc_t* const seqdesc, std::filesystem::path& exp
 			}
 		}
 
-		smd->Write();
+		smd->Write(buf->Buffer(), managedBufferSize);
 	}
 
 	FreeAllocVar(smd);
+	g_BufferManager.RelieveBuffer(buf);
 
 	return true;
 }
@@ -2041,6 +2786,282 @@ void InitModelBoneMatrix(CDXDrawData* const drawData, const ModelParsedData_t* c
 #endif
 
 	UpdateModelBoneMatrix(drawData, parsedData);
+}
+
+void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const parsedData, char* const assetName, const uint64_t assetGUID, const bool firstFrameForAsset)
+{
+	// [rika]: set up CDXDrawData
+	g_currentPreviewDrawData.CheckForMonitorChange();
+
+	if (assetGUID != g_currentPreviewDrawData.guid || g_currentPreviewDrawData.GetDrawData() == nullptr || info->selectedLODLevel != g_currentPreviewDrawData.activeLODLevel)
+	{
+		g_currentPreviewDrawData.FreeDrawData();
+
+		CDXDrawData* const drawData = new CDXDrawData();
+		drawData->meshBuffers.resize(parsedData->lods.at(info->selectedLODLevel).meshes.size());
+		drawData->modelName = assetName;
+
+		ParseModelDrawData(parsedData, drawData, info->selectedLODLevel);
+
+		g_currentPreviewDrawData.UpdateAssetInfo(drawData, assetGUID, info->selectedLODLevel);
+	}
+
+	CDXDrawData* const drawData = g_currentPreviewDrawData.GetDrawData();
+	if (!drawData)
+		return nullptr;
+
+	drawData->vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_vs", s_PreviewVertexShader, eShaderType::Vertex);;
+	drawData->pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_ps", s_PreviewPixelShader, eShaderType::Pixel);
+
+	// [rika]: do the preview stuff here!
+	assertm(parsedData->lods.size() > 0, "no lods in preview?");
+	const ModelLODData_t& lodData = parsedData->lods.at(info->selectedLODLevel);
+
+	ImGui::Text("Bones: %llu", parsedData->bones.size());
+	ImGui::Text("LODs: %llu", parsedData->lods.size());
+	ImGui::Text("Local Sequences: %i", parsedData->NumLocalSeq());
+
+	if (info->minLODIndex != info->maxLODIndex)
+	{
+		ImGui::SliderScalar("LOD Level", ImGuiDataType_U8, &info->selectedLODLevel, &info->minLODIndex, &info->maxLODIndex);
+	}
+
+	if (parsedData->skins.size())
+	{
+		ImGui::TextUnformatted("Skins:");
+		ImGui::SameLine();
+
+		// [rika]: cheat a little here since the first skin name should always be 'STUDIO_DEFAULT_SKIN_NAME'
+		static const char* label = nullptr;
+		if (firstFrameForAsset)
+			label = STUDIO_DEFAULT_SKIN_NAME;
+
+		if (ImGui::BeginCombo("##SKins", label, ImGuiComboFlags_NoArrowButton))
+		{
+			for (size_t i = 0; i < parsedData->skins.size(); i++)
+			{
+				const ModelSkinData_t& skin = parsedData->skins.at(i);
+
+				const bool isSelected = info->selectedSkinIndex == i || (firstFrameForAsset && info->selectedSkinIndex == info->lastSelectedSkinIndex);
+
+				if (ImGui::Selectable(skin.name, isSelected))
+				{
+					info->selectedSkinIndex = i;
+					label = skin.name;
+				}
+
+				if (isSelected) ImGui::SetItemDefaultFocus();
+			}
+
+			ImGui::EndCombo();
+		}
+	}
+
+	g_ExportSettings.previewedSkinIndex = static_cast<int>(info->selectedSkinIndex);
+
+	if (parsedData->bodyParts.size())
+	{
+		ImGui::TextUnformatted("Bodypart:");
+		ImGui::SameLine();
+
+		// [rika]: previous implemention was loading an invalid string upon loading different files without closing the tool
+		static const char* bodypartLabel = nullptr;
+		if (firstFrameForAsset)
+			bodypartLabel = parsedData->bodyParts.at(0).GetNameCStr();
+
+		if (ImGui::BeginCombo("##Bodypart", bodypartLabel, ImGuiComboFlags_NoArrowButton))
+		{
+			for (size_t i = 0; i < parsedData->bodyParts.size(); i++)
+			{
+				const ModelBodyPart_t& bodypart = parsedData->bodyParts.at(i);
+
+				const bool isSelected = info->selectedBodypartIndex == i || (firstFrameForAsset && info->selectedBodypartIndex == info->lastSelectedBodypartIndex);
+
+				if (ImGui::Selectable(bodypart.GetNameCStr(), isSelected))
+				{
+					info->selectedBodypartIndex = i;
+					bodypartLabel = bodypart.GetNameCStr();
+				}
+
+				if (isSelected) ImGui::SetItemDefaultFocus();
+			}
+
+			ImGui::EndCombo();
+		}
+
+		if (parsedData->bodyParts.at(info->selectedBodypartIndex).numModels > 1)
+		{
+			const ModelBodyPart_t& bodypart = parsedData->bodyParts.at(info->selectedBodypartIndex);
+			size_t& selectedModelIndex = info->bodygroupModelSelected.at(info->selectedBodypartIndex);
+
+			ImGui::TextUnformatted("Model:");
+			ImGui::SameLine();
+
+			static const char* label = nullptr;
+
+			// update label if our bodypart changes
+			if (info->selectedBodypartIndex != info->lastSelectedBodypartIndex || firstFrameForAsset)
+				label = lodData.models.at(bodypart.modelIndex + selectedModelIndex).name.c_str();
+
+			if (ImGui::BeginCombo("##Model", label, ImGuiComboFlags_NoArrowButton))
+			{
+				for (int i = 0; i < bodypart.numModels; i++)
+				{
+					const bool isSelected = selectedModelIndex == i;
+
+					const char* tmp = lodData.models.at(bodypart.modelIndex + i).name.c_str();
+					if (ImGui::Selectable(tmp, isSelected))
+					{
+						selectedModelIndex = static_cast<size_t>(i);
+						label = tmp;
+					}
+
+					if (isSelected) ImGui::SetItemDefaultFocus();
+				}
+
+				ImGui::EndCombo();
+			}
+		}
+	}
+
+	// [rika]: our currently selected skin
+	const ModelSkinData_t& skinData = parsedData->skins.at(info->selectedSkinIndex);
+	for (size_t i = 0; i < lodData.meshes.size(); ++i)
+	{
+		const ModelMeshData_t& mesh = lodData.meshes.at(i);
+		DXMeshDrawData_t* const meshDrawData = &drawData->meshBuffers[i];
+
+		meshDrawData->indexFormat = DXGI_FORMAT_R16_UINT;
+
+		// If this body part is disabled, don't draw the mesh.
+		drawData->meshBuffers[i].visible = parsedData->bodyParts[mesh.bodyPartIndex].IsPreviewEnabled();
+
+		const ModelBodyPart_t& bodypart = parsedData->bodyParts[mesh.bodyPartIndex];
+		const ModelModelData_t& model = lodData.models.at(bodypart.modelIndex + info->bodygroupModelSelected.at(mesh.bodyPartIndex));
+		if (i >= model.meshIndex && i < model.meshIndex + model.meshCount)
+			drawData->meshBuffers[i].visible = true;
+		else
+			drawData->meshBuffers[i].visible = false;
+
+		// the rest of this loop requires the material to be valid
+		// so if it isn't just continue to the next iteration
+		CPakAsset* const matlAsset = parsedData->materials.at(skinData.indices[mesh.materialId]).asset;
+		if (!matlAsset)
+			continue;
+
+		const MaterialAsset* const matl = reinterpret_cast<MaterialAsset*>(matlAsset->extraData());
+
+#if defined(ADVANCED_MODEL_PREVIEW)
+		if (matl->shaderSetAsset)
+		{
+			ShaderSetAsset* const shaderSet = reinterpret_cast<ShaderSetAsset*>(matl->shaderSetAsset->extraData());
+
+			if (shaderSet->vertexShaderAsset && shaderSet->pixelShaderAsset)
+			{
+				ShaderAsset* const vertexShader = reinterpret_cast<ShaderAsset*>(shaderSet->vertexShaderAsset->extraData());
+				ShaderAsset* const pixelShader = reinterpret_cast<ShaderAsset*>(shaderSet->pixelShaderAsset->extraData());
+
+				meshDrawData->vertexShader = vertexShader->vertexShader;
+				meshDrawData->pixelShader = pixelShader->pixelShader;
+
+				meshDrawData->inputLayout = vertexShader->vertexInputLayout;
+			}
+		}
+#endif
+
+		if ((meshDrawData->textures.size() == 0 || info->lastSelectedSkinIndex != info->selectedSkinIndex) && matl)
+		{
+			meshDrawData->textures.clear();
+			for (auto& texEntry : matl->txtrAssets)
+			{
+				if (texEntry.asset)
+				{
+					TextureAsset* txtr = reinterpret_cast<TextureAsset*>(texEntry.asset->extraData());
+					const std::shared_ptr<CTexture> highestTextureMip = CreateTextureFromMip(texEntry.asset, &txtr->mipArray[txtr->mipArray.size() - 1], s_PakToDxgiFormat[txtr->imgFormat]);
+					meshDrawData->textures.push_back({ texEntry.index, highestTextureMip });
+				}
+			}
+		}
+	}
+
+	if (!drawData->boneMatrixBuffer)
+		InitModelBoneMatrix(drawData, parsedData);
+
+	if (!drawData->transformsBuffer)
+	{
+		D3D11_BUFFER_DESC desc{};
+
+#if defined(ADVANCED_MODEL_PREVIEW)
+		constexpr UINT transformsBufferSizeAligned = IALIGN(sizeof(CBufModelInstance), 16);
+#else
+		constexpr UINT transformsBufferSizeAligned = IALIGN(sizeof(VS_TransformConstants), 16);
+#endif
+
+		desc.ByteWidth = transformsBufferSizeAligned;
+
+		// make sure this buffer can be updated every frame
+		desc.Usage = D3D11_USAGE_DYNAMIC;
+		desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+		// const buffer
+		desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+		g_dxHandler->GetDevice()->CreateBuffer(&desc, NULL, &drawData->transformsBuffer);
+	}
+
+	D3D11_MAPPED_SUBRESOURCE resource;
+	g_dxHandler->GetDeviceContext()->Map(
+		drawData->transformsBuffer, 0,
+		D3D11_MAP_WRITE_DISCARD, 0,
+		&resource
+	);
+
+	CDXCamera* const camera = g_dxHandler->GetCamera();
+	const XMMATRIX view = camera->GetViewMatrix();
+	const XMMATRIX model = XMMatrixTranslationFromVector(drawData->position.AsXMVector());
+	const XMMATRIX projection = g_dxHandler->GetProjMatrix();
+
+#if !defined(ADVANCED_MODEL_PREVIEW)
+	VS_TransformConstants* const transforms = reinterpret_cast<VS_TransformConstants*>(resource.pData);
+	transforms->modelMatrix = XMMatrixTranspose(model);
+	transforms->viewMatrix = XMMatrixTranspose(view);
+	transforms->projectionMatrix = XMMatrixTranspose(projection);
+#else
+	CBufModelInstance* const modelInstance = reinterpret_cast<CBufModelInstance*>(resource.pData);
+	CBufModelInstance::ModelInstance& mi = modelInstance->c_modelInst;
+
+	// sub_18001FB40 in r2
+	XMMATRIX modelMatrix = {};
+	memcpy(&modelMatrix, &modelAsset->bones[0].poseToBone, sizeof(ModelBone_t::poseToBone));
+
+	modelMatrix.r[3].m128_f32[3] = 1.f;
+
+	mi.objectToCameraRelativePrevFrame = mi.objectToCameraRelative;
+
+	modelMatrix.r[0].m128_f32[3] += camera->position.x;
+	modelMatrix.r[1].m128_f32[3] += camera->position.y;
+	modelMatrix.r[2].m128_f32[3] += camera->position.z;
+
+	modelMatrix -= XMMatrixRotationRollPitchYaw(camera->rotation.x, camera->rotation.y, camera->rotation.z);
+
+	modelMatrix = XMMatrixTranspose(modelMatrix);
+
+	mi.diffuseModulation = { 1.f, 1.f, 1.f, 1.f };
+
+	XMStoreFloat3x4(&mi.objectToCameraRelative, modelMatrix);
+	XMStoreFloat3x4(&mi.objectToCameraRelativePrevFrame, modelMatrix);
+
+#endif
+
+	if (info->lastSelectedBodypartIndex != info->selectedBodypartIndex)
+		info->lastSelectedBodypartIndex = info->selectedBodypartIndex;
+
+	if (info->lastSelectedSkinIndex != info->selectedSkinIndex)
+		info->lastSelectedSkinIndex = info->selectedSkinIndex;
+
+	g_dxHandler->GetDeviceContext()->Unmap(drawData->transformsBuffer, 0);
+
+	return drawData;
 }
 
 void PreviewAnimDesc(const animdesc_t* const animdesc, const int index)

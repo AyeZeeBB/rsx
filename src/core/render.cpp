@@ -21,9 +21,11 @@
 extern CDXParentHandler* g_dxHandler;
 extern std::atomic<uint32_t> maxConcurrentThreads;
 
-ExportSettings_t g_ExportSettings{ .previewedSkinIndex = 0, .exportNormalRecalcSetting = eNormalExportRecalc::NML_RECALC_NONE, .exportTextureNameSetting = eTextureExportName::TXTR_NAME_TEXT,
-    .exportPathsFull = false, .exportAssetDeps = false, .exportRigSequences = true, .exportModelSkin = false, .exportMaterialTextures = true, .exportPhysicsContentsFilter = static_cast<uint32_t>(TRACE_MASK_ALL) };
+ExportSettings_t g_ExportSettings{ .exportNormalRecalcSetting = eNormalExportRecalc::NML_RECALC_NONE, .exportTextureNameSetting = eTextureExportName::TXTR_NAME_TEXT, .exportMaterialTextures = true,
+    .exportPathsFull = false, .exportAssetDeps = false, .previewedSkinIndex = 0, .qcMajorVersion = 49, .qcMinorVersion = 0, .exportRigSequences = true, .exportModelSkin = false, .exportModelMatsTruncated = false, .exportPhysicsContentsFilter = static_cast<uint32_t>(TRACE_MASK_ALL) };
 PreviewSettings_t g_PreviewSettings { .previewCullDistance = PREVIEW_CULL_DEFAULT, .previewMovementSpeed = PREVIEW_SPEED_DEFAULT };
+
+CPreviewDrawData g_currentPreviewDrawData;
 
 std::atomic<bool> inJobAction = false;
 
@@ -682,17 +684,8 @@ void HandleRenderFrame()
             ImGui::SameLine();
             g_pImGuiHandler->HelpMarker("Enables exporting of all dependencies that are associated with any asset that is being exported.");
 
-            ImGui::Checkbox("Export AnimRig sequences", &g_ExportSettings.exportRigSequences);
-            ImGui::SameLine();
-            g_pImGuiHandler->HelpMarker("Enables exporting of all animation sequences that are associated with any AnimRig (and MDL) asset that is being exported.");
-
-            ImGui::Checkbox("Export Model Skin", &g_ExportSettings.exportModelSkin);
-            ImGui::SameLine();
-            g_pImGuiHandler->HelpMarker("Enables exporting a model with the previewed skin.");
-
-            ImGui::Checkbox("Export Material Textures", &g_ExportSettings.exportMaterialTextures);
-            ImGui::SameLine();
-            g_pImGuiHandler->HelpMarker("Enables exporting of all textures that are associated with any material asset that is being exported.");
+            // texture settings
+            ImGui::SeparatorText("Export (Textures)");
 
             ImGui::Combo("Material Texture Names", reinterpret_cast<int*>(&g_ExportSettings.exportTextureNameSetting), s_TextureExportNameSetting, static_cast<int>(ARRAYSIZE(s_TextureExportNameSetting)));
             ImGui::SameLine();
@@ -702,6 +695,36 @@ void HandleRenderFrame()
             ImGui::SameLine();
             g_pImGuiHandler->HelpMarker("None: exports the normal as it is stored.\nDirectX: exports with a generated blue channel.\nOpenGL: exports with a generated blue channel and inverts the green channel.");
 
+            ImGui::Checkbox("Export Material Textures", &g_ExportSettings.exportMaterialTextures);
+            ImGui::SameLine();
+            g_pImGuiHandler->HelpMarker("Enables exporting of all textures that are associated with any material asset that is being exported.");
+
+            // model settings
+            ImGui::SeparatorText("Export (Models)");
+
+            ImGui::Checkbox("Export Sequences", &g_ExportSettings.exportRigSequences);
+            ImGui::SameLine();
+            g_pImGuiHandler->HelpMarker("Enables exporting of all animation sequences that are associated with any rig or model asset that is being exported.");
+
+            ImGui::Checkbox("Export Skin", &g_ExportSettings.exportModelSkin);
+            ImGui::SameLine();
+            g_pImGuiHandler->HelpMarker("Enables exporting a model with the previewed skin.");
+
+            ImGui::Checkbox("Truncate Materials", &g_ExportSettings.exportModelMatsTruncated);
+            ImGui::SameLine();
+            g_pImGuiHandler->HelpMarker("Truncates material names on SMD.");
+
+            ImGui::PushItemWidth(48.0f);
+            ImGui::InputScalar("##QCTargetMajor", ImGuiDataType_U16, reinterpret_cast<uint16_t*>(&g_ExportSettings.qcMajorVersion), nullptr, nullptr, "%u", ImGuiInputTextFlags_CharsDecimal);
+            ImGui::SameLine();
+            ImGui::InputScalar("##QCTargetMinor", ImGuiDataType_U16, reinterpret_cast<uint16_t*>(&g_ExportSettings.qcMinorVersion), nullptr, nullptr, "%u", ImGuiInputTextFlags_CharsDecimal);
+            ImGui::PopItemWidth();
+            ImGui::SameLine();
+            ImGui::Text("QC Target Version");
+            ImGui::SameLine();
+            g_pImGuiHandler->HelpMarker("Desired version for QC files to be compatible with.");
+
+            // physics settings
             ImGui::InputInt("Physics contents filter", reinterpret_cast<int*>(&g_ExportSettings.exportPhysicsContentsFilter), 1, 100, ImGuiInputTextFlags_CharsHexadecimal);
             ImGui::SameLine();
             g_pImGuiHandler->HelpMarker("Filter physics meshes in or out based on selected contents.");

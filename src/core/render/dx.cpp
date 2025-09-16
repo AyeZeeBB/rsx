@@ -1,6 +1,10 @@
 #include <pch.h>
 #include <core/render/dx.h>
 #include <core/input/input.h>
+#include <thirdparty/imgui/backends/imgui_impl_dx11.h>
+#include <thirdparty/imgui/backends/imgui_impl_win32.h>
+
+#include <core/window.h>
 
 #include <thirdparty/directxtex/DirectXTex.h>
 
@@ -11,6 +15,8 @@
 #else
 #pragma comment(lib, "thirdparty/directxtex/DirectXTex_x64r.lib")
 #endif
+
+#pragma comment(lib, "dxgi")
 
 #define ToScratchImage reinterpret_cast<DirectX::ScratchImage*>(m_texture)
 
@@ -36,11 +42,7 @@ CTexture::~CTexture()
     }
     m_texture = nullptr;
 
-    if (m_shaderResourceView)
-    {
-        m_shaderResourceView->Release();
-    }
-    m_shaderResourceView = nullptr;
+    DX_RELEASE_PTR(m_shaderResourceView);
 }
 
 void CTexture::InitTexture(const char* const buf, const size_t bufSize, const size_t width, const size_t height, const DXGI_FORMAT imgFormat, const size_t arraySize, const size_t mipLevels)
@@ -90,7 +92,22 @@ bool CTexture::CreateShaderResourceView(ID3D11Device* const device)
 {
     assertm(device, "Invalid device.");
     assertm(m_texture, "Invalid scratch image.");
+
+    m_currentDevice = device;
+
     return SUCCEEDED(DirectX::CreateShaderResourceView(device, ToScratchImage->GetImages(), ToScratchImage->GetImageCount(), ToScratchImage->GetMetadata(), &m_shaderResourceView));
+}
+
+ID3D11ShaderResourceView* const CTexture::GetSRV()
+{
+    if (g_dxHandler->GetDevice() == m_currentDevice)
+        return m_shaderResourceView;
+
+    // device has changed, recalc the SRV
+    DX_RELEASE_PTR(m_shaderResourceView);
+    CreateShaderResourceView(g_dxHandler->GetDevice());
+
+    return m_shaderResourceView;
 }
 
 bool CTexture::ExportAsPng(const std::filesystem::path& exportPath)
@@ -350,11 +367,125 @@ XMMATRIX CDXCamera::GetViewMatrix()
     return XMMatrixLookAtLH(position.AsXMVector(), target, up);
 }
 
-bool CDXParentHandler::SetupDeviceD3D()
+bool CDXParentHandler::SetupAdapters()
 {
-    assertm((m_windowHandle != nullptr), "Didn't initialize window handle.");
-    assertm((m_pDevice == nullptr), "DX device was already setup.");
+    // factorio
+    IDXGIFactory1* pFactory;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory), reinterpret_cast<void**>(&pFactory))))
+    {
+        assertm(false, "Failed to create DXGIFactory");
+        return false;
+    }
 
+    UINT adapterIdx = 0;
+    IDXGIAdapter1* pAdapter;
+    std::vector <IDXGIAdapter1*> vAdapters;
+    while (pFactory->EnumAdapters1(adapterIdx, &pAdapter) != DXGI_ERROR_NOT_FOUND)
+    {
+        vAdapters.push_back(pAdapter);
+        ++adapterIdx;
+    }
+
+    m_numAdapters = adapterIdx;
+    m_ppAdapters = new IDXGIAdapter1*[m_numAdapters];
+
+    memcpy_s(m_ppAdapters, sizeof(intptr_t) * m_numAdapters, vAdapters.data(), sizeof(intptr_t) * vAdapters.size());
+
+    DX_RELEASE_PTR(pFactory);
+
+    return true;
+}
+
+bool CDXParentHandler::SetupMonitors()
+{
+    if (!m_numAdapters || !m_ppAdapters)
+    {
+        assertm(false, "system had no adapters");
+        return false;
+    }
+
+    m_numMonitors = static_cast<size_t>(GetSystemMetrics(SM_CMONITORS));
+    m_pMonitors = new MonitorAdapter_t[m_numMonitors];
+    m_activeMonitor = 0u;
+
+    for (size_t i = 0; i < m_numAdapters; i++)
+    {
+        IDXGIAdapter1* pAdapter = m_ppAdapters[i];
+
+        UINT numOutputs = 0u;
+        IDXGIOutput* pOutput;
+        while (pAdapter->EnumOutputs(numOutputs, &pOutput) != DXGI_ERROR_NOT_FOUND)
+        {
+            numOutputs++;
+
+            DXGI_OUTPUT_DESC outputDesc;
+            pOutput->GetDesc(&outputDesc);
+            DX_RELEASE_PTR(pOutput);
+
+            size_t monitorIndex = 0ull;
+            if (!MonitorExists(outputDesc.Monitor, monitorIndex))
+            {
+                m_pMonitors[monitorIndex].m_pAdapter = pAdapter;
+                m_pMonitors[monitorIndex].m_pMonitor = outputDesc.Monitor;
+            }
+        }
+    }
+
+    return true;
+}
+
+// return if a monitor is set, it's index, or the last unused index if it has not been set
+bool CDXParentHandler::MonitorExists(HMONITOR hmonitor, size_t& index)
+{
+    index = 0ull;
+    for (index = 0; index < m_numMonitors; index++)
+    {
+        MonitorAdapter_t* const pMonitor = m_pMonitors + index;
+
+        if (pMonitor->m_pMonitor == hmonitor)
+            return true;
+
+        if (pMonitor->m_pMonitor)
+            continue;
+
+        // should be set consecutively
+        if (!pMonitor->m_pMonitor)
+            break;
+    }
+
+    return false;
+}
+
+// return false if adapter changed
+bool CDXParentHandler::SetActiveMonitor()
+{
+    const HMONITOR currentMonitor = GetNearestMonitorFromWindowHandle(m_windowHandle);
+
+    // active monitor is already the correct monitor
+    if (m_pMonitors[m_activeMonitor].m_pMonitor == currentMonitor)
+        return true;
+
+    for (uint32_t i = 0; i < m_numMonitors; i++)
+    {
+        if (m_pMonitors[i].m_pMonitor != currentMonitor)
+            continue;
+
+        // adapter is the same, return true
+        if (MonitorHasSameAdapter(i, m_activeMonitor))
+        {
+            m_activeMonitor = i;
+            return true;
+        }
+
+        m_activeMonitor = i;
+        break;
+    }
+
+    return false;
+}
+
+bool CDXParentHandler::SetupSwapchain()
+{
     DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
     swapChainDesc.BufferCount = 2u;
     swapChainDesc.BufferDesc.Width = 0u;
@@ -379,13 +510,31 @@ bool CDXParentHandler::SetupDeviceD3D()
     deviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
-    // [rika]: this is likely causing our issue with a white screen on igpus, todo look into an adapter here
-    if (D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, deviceFlags, featureLevelArr, ARRSIZE(featureLevelArr),
+    assertm(m_pMonitors, "had no monitors");
+    assertm(m_pMonitors[m_activeMonitor].m_pAdapter, "adapter was nullptr");
+    if (D3D11CreateDeviceAndSwapChain(m_pMonitors[m_activeMonitor].m_pAdapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, deviceFlags, featureLevelArr, ARRSIZE(featureLevelArr),
         D3D11_SDK_VERSION, &swapChainDesc, &m_pSwapChain, &m_pDevice, &featureLevel, &m_pDeviceContext) != S_OK)
     {
         assertm(false, "Failed to setup device and swapchain.");
         return false;
     }
+
+    return true;
+}
+
+bool CDXParentHandler::SetupDeviceD3D()
+{
+    assertm((m_windowHandle != nullptr), "Didn't initialize window handle.");
+    assertm((m_pDevice == nullptr), "DX device was already setup.");
+
+    // parse out our system's adapters
+    SetupAdapters();
+    SetupMonitors();
+
+    // return ignored
+    SetActiveMonitor();
+
+    SetupSwapchain();
 
     RECT windowRect = {};
     GetWindowRect(m_windowHandle, &windowRect);
@@ -543,6 +692,14 @@ void CDXParentHandler::CleanupD3D()
     DX_RELEASE_PTR(m_pRasterizerState);
     DX_RELEASE_PTR(m_pSamplerState);
     DX_RELEASE_PTR(m_pSamplerCmpState);
+
+    for (size_t i = 0; i < m_numAdapters; i++)
+    {
+        DX_RELEASE_PTR(m_ppAdapters[i]);
+    }
+
+    FreeAllocArray(m_ppAdapters);
+    FreeAllocArray(m_pMonitors);
 }
 
 void CDXParentHandler::HandleResize(const uint16_t x, const uint16_t y)
@@ -550,6 +707,53 @@ void CDXParentHandler::HandleResize(const uint16_t x, const uint16_t y)
     DX_RELEASE_PTR(m_pMainView);
     m_pSwapChain->ResizeBuffers(0u, static_cast<uint32_t>(x), static_cast<uint32_t>(y), DXGI_FORMAT_UNKNOWN, 0u);
     CreateMainView(x, y);
+}
+
+bool CDXParentHandler::HandleWindowChange(HWND hWnd)
+{
+    assertm(hWnd == m_windowHandle, "window handles did not match");
+
+    // check if our adapter changed, if it hasn't don't proceed
+    if (SetActiveMonitor())
+        return true;
+
+#ifdef _DEBUG
+    Log("Adapter changed, rebuilding swap chain...\n");
+#endif // _DEBUG
+
+    // destroy old imgui
+    ImGui_ImplDX11_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+
+    // create new swap chain
+    DX_RELEASE_PTR(m_pSwapChain);
+    SetupSwapchain();
+
+    RECT windowRect = {};
+    GetWindowRect(m_windowHandle, &windowRect);
+
+    const uint16_t width = static_cast<uint16_t>(windowRect.right - windowRect.left);
+    const uint16_t height = static_cast<uint16_t>(windowRect.bottom - windowRect.top);
+
+    // need to reset this or else things Explode
+    if (!CreateMainView(width, height))
+        return false;
+
+    // force shaders to recompile for the correct adapter when they are used again
+    if (m_pShaderManager)
+    {
+        m_pShaderManager->Explode();
+    }
+
+    // recreate imgui, not sure if there's any other way
+    ImGui_ImplWin32_Init(m_windowHandle);
+    ImGui_ImplDX11_Init(g_dxHandler->GetDevice(), g_dxHandler->GetDeviceContext());
+
+#ifdef _DEBUG
+    Log("Swapchain successfully rebuilt!\n");
+#endif // DEBUG
+
+    return true;
 }
 
 std::shared_ptr<CTexture> CDXParentHandler::CreateRenderTexture(const char* const buf, const size_t bufSize, const int width, const int height, const DXGI_FORMAT imgFormat, const size_t arraySize, const size_t mipLevels)

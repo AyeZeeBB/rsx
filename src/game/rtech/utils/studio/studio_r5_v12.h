@@ -2,8 +2,33 @@
 
 // contains versions:
 // 12.1, 12.2, 12.3, 13, 13.1, 14, 14.1, 15
+#pragma pack(push, 4)
 namespace r5
 {
+	//
+	// VERSION 12.1
+	//
+
+	//
+	// Model HWDATA
+	//
+
+	// see ModelLODData_t
+	struct studio_hw_lodata_v12_1_t
+	{
+		short lodLevel;		// lod level that this header represents
+		short groupIndex;	// vertex group index
+		short meshIndex;	// for lod, probably 0 in most cases
+		short meshCount;
+
+		float switchPoint;
+
+		char pad_C[4];
+	};
+	static_assert(sizeof(studio_hw_lodata_v12_1_t) == 0x10);
+
+	// for accessing a vertex chunk
+
 	struct studio_hw_groupdata_v12_1_t
 	{
 		int dataOffset; // offset to this section in vg
@@ -13,192 +38,12 @@ namespace r5
 		short lodCount;		// number of lods contained within this group
 		short lodMap;		// lods in this group, each bit is a lod
 	};
-	static_assert(sizeof(studio_hw_groupdata_v12_1_t) == 16);
+	static_assert(sizeof(studio_hw_groupdata_v12_1_t) == 0x10);
 
-	struct mstudioanimsections_v12_1_t
-	{
-		int animindex;
-		bool isExternal; // 0 or 1, if 1 section is not in local data
-	};
-	static_assert(sizeof(mstudioanimsections_v12_1_t) == 0x8);
 
-	struct mstudioanimdesc_v12_1_t
-	{
-		int baseptr;
-
-		int sznameindex;
-		inline const char* pszName() const { return ((char*)this + sznameindex); }
-
-		float fps; // frames per second	
-		int flags; // looping/non-looping flags
-
-		int numframes;
-
-		// piecewise movement
-		int nummovements;
-		int movementindex;
-
-		int framemovementindex; // new in v52
-		inline r5::mstudioframemovement_t* pFrameMovement() const { return reinterpret_cast<r5::mstudioframemovement_t*>((char*)this + framemovementindex); }
-
-		int animindex; // non-zero when anim data isn't in sections
-
-		int numikrules;
-		int ikruleindex; // non-zero when IK data is stored in the mdl
-
-		int sectionindex;
-		int sectionstallframes; // number of stall frames inside the animation, the reset excluding the final frame are stored externally. when external data is not loaded(?)/found(?) it falls back on the last frame of this as a stall
-		int sectionframes; // number of frames used in each fast lookup section, zero if not used
-		inline const mstudioanimsections_v12_1_t* pSection(int i) const { return reinterpret_cast<mstudioanimsections_v12_1_t*>((char*)this + sectionindex) + i; }
-
-		int64_t unk1; // maybe some sort of thread/mutic for the external data? set on pak asset load from unk_10
-		char* sectionDataExternal; // set on pak asset load
-	};
-
-	#pragma pack(push, 1)
-	struct mstudiomesh_v12_1_t
-	{
-		uint16_t material;
-
-		uint16_t unk;	// unused in v14 as string gets written over it (mdl/vehicles_r5\land_med\msc_freight_tortus_mod\veh_land_msc_freight_tortus_mod_cargo_holder_v1_static.rmdl)
-		// seemingly added in v14, but unused in v14/15, maybe this carried over to v16?
-		int modelindex;
-
-		int numvertices; // number of unique vertices/normals/texcoords
-		int vertexoffset; // vertex mstudiovertex_t
-		// offset by vertexoffset number of verts into vvd vertexes, relative to the models offset
-
-		// a unique ordinal for this mesh
-		int meshid;
-
-		Vector center;
-
-		mstudio_meshvertexloddata_t vertexloddata;
-
-		void* unkptr; // unknown memory pointer, probably one of the older vertex pointers but moved
-	};
-	#pragma pack(pop)
-	static_assert(sizeof(mstudiomesh_v12_1_t) == 0x4C);
-
-	struct mstudiomodel_v12_1_t
-	{
-		char name[64];
-
-		int unkStringOffset; // byte before string block
-
-		// it looks like they write the entire name
-		// then write over it with other values where needed
-		// why.
-		int type;
-
-		float boundingradius;
-
-		int nummeshes;
-		int meshindex;
-		const mstudiomesh_v12_1_t* const pMesh(int i) const { return reinterpret_cast<mstudiomesh_v12_1_t*>((char*)this + meshindex) + i; }
-
-		// cache purposes
-		int numvertices; // number of unique vertices/normals/texcoords
-		int vertexindex; // vertex Vector
-		int tangentsindex; // tangents Vector
-
-		int numattachments;
-		int attachmentindex;
-
-		int colorindex; // vertex color
-		// offset by colorindex number of bytes into vvc vertex colors
-		int uv2index; // vertex second uv map
-		// offset by uv2index number of bytes into vvc secondary uv map
-	};
-	static_assert(sizeof(mstudiomodel_v12_1_t) == 0x70);
-
-	// mdl_ v13.1
-	struct mstudiomodel_v13_1_t
-	{
-		inline const mstudiomodel_v12_1_t* const AsV12_1() const { return reinterpret_cast<const mstudiomodel_v12_1_t* const>(this); }
-
-		char name[64];
-
-		int unkStringOffset; // byte before string block
-
-		// it looks like they write the entire name
-		// then write over it with other values where needed
-		// why.
-		int type;
-
-		float boundingradius;
-
-		int nummeshes;
-		int meshindex;
-
-		// cache purposes
-		int numvertices; // number of unique vertices/normals/texcoords
-		int vertexindex; // vertex Vector
-		int tangentsindex; // tangents Vector
-
-		int numattachments;
-		int attachmentindex;
-
-		int colorindex; // vertex color
-		// offset by colorindex number of bytes into vvc vertex colors
-		int uv2index; // vertex second uv map
-		// offset by uv2index number of bytes into vvc secondary uv map
-
-		int uv3index; // same as uv2index, probably replaces uv2 data
-	};
-	static_assert(sizeof(mstudiomodel_v13_1_t) == 0x74);
-
-	// mdl_ v14
-	struct mstudiomodel_v14_t
-	{
-		char name[64];
-
-		int unkStringOffset; // byte before string block
-
-		// they write over these two when it's the default
-		int type;
-
-		float boundingradius;
-
-		int meshCountTotal;
-		int meshCountBase;
-		int meshCountBlends;
-
-		int meshindex;
-
-		mstudiomesh_v12_1_t* pMesh(int i) const
-		{
-			return reinterpret_cast<mstudiomesh_v12_1_t*>((char*)this + meshindex) + i;
-		}
-
-		// most of these vtx, vvd, vvc, and vg indexes are depreciated after v14.1 (s14)
-
-		// cache purposes
-		int numvertices; // number of unique vertices/normals/texcoords
-		int vertexindex; // vertex Vector
-		int tangentsindex; // tangents Vector
-
-		int numattachments;
-		int attachmentindex;
-
-		int colorindex; // vertex color
-		int uv2index; // vertex second uv map
-		int unkOffset;
-	};
-
-	// mdl_ v15
-	struct mstudiobodyparts_v15_t
-	{
-		int sznameindex;
-		int nummodels;
-		int base;
-		int modelindex; // index into models array
-
-		int unk;
-		int meshOffset; // offset to this bodyparts meshes
-
-		inline const mstudiobodyparts_t* const AsV8() const { return reinterpret_cast<const mstudiobodyparts_t* const>(this); }
-	};
+	//
+	// Model Bones
+	//
 
 	struct mstudiobone_v12_1_t
 	{
@@ -235,6 +80,114 @@ namespace r5
 	};
 	static_assert(sizeof(mstudiobone_v12_1_t) == 0xB4);
 
+
+	//
+	// Model Animations
+	//
+
+	struct mstudioanimsections_v12_1_t
+	{
+		int animindex;
+		bool isExternal; // 0 or 1, if 1 section is not in local data
+	};
+	static_assert(sizeof(mstudioanimsections_v12_1_t) == 0x8);
+
+	struct mstudioanimdesc_v12_1_t
+	{
+		int baseptr;
+
+		int sznameindex;
+		inline const char* pszName() const { return ((char*)this + sznameindex); }
+
+		float fps; // frames per second	
+		int flags; // looping/non-looping flags
+
+		int numframes;
+
+		// piecewise movement
+		int nummovements;
+		int movementindex;
+
+		int framemovementindex; // new in v52
+		inline r5::mstudioframemovement_t* pFrameMovement() const { return reinterpret_cast<r5::mstudioframemovement_t*>((char*)this + framemovementindex); }
+
+		int animindex; // non-zero when anim data isn't in sections
+		//char* pAnim(int* piFrame) const; // returns pointer to data and new frame index
+
+		int numikrules;
+		int ikruleindex; // non-zero when IK data is stored in the mdl
+
+		int sectionindex;
+		int sectionstallframes; // number of stall frames inside the animation, the reset excluding the final frame are stored externally. when external data is not loaded(?)/found(?) it falls back on the last frame of this as a stall
+		int sectionframes; // number of frames used in each fast lookup section, zero if not used
+		inline const mstudioanimsections_v12_1_t* pSection(int i) const { return reinterpret_cast<mstudioanimsections_v12_1_t*>((char*)this + sectionindex) + i; }
+
+		int64_t unk1; // maybe some sort of thread/mutic for the external data? set on pak asset load from unk_10
+		char* sectionDataExternal; // set on pak asset load
+	};
+
+
+	//
+	// Model Bodyparts
+	// 
+
+	struct mstudiomesh_v12_1_t
+	{
+		int material;
+
+		int modelindex;
+
+		int numvertices;	// number of unique vertices/normals/texcoords
+		int vertexoffset;	// vertex mstudiovertex_t
+		// offset by vertexoffset number of verts into vvd vertexes, relative to the models offset
+
+		// a unique ordinal for this mesh
+		int meshid;
+
+		Vector center;
+
+		mstudio_meshvertexloddata_t vertexloddata;
+
+		void* unk_44; // unknown memory pointer, probably one of the older vertex pointers but moved
+	};
+	static_assert(sizeof(mstudiomesh_v12_1_t) == 0x4C);
+
+	struct mstudiomodel_v12_1_t
+	{
+		char name[64];
+
+		int unkStringOffset; // byte before string block
+
+		// it looks like they write the entire name
+		// then write over it with other values where needed
+		// why.
+		int type;
+
+		float boundingradius;
+
+		int nummeshes;
+		int meshindex;
+		const mstudiomesh_v12_1_t* const pMesh(int i) const { return reinterpret_cast<mstudiomesh_v12_1_t*>((char*)this + meshindex) + i; }
+
+		// cache purposes
+		int numvertices; // number of unique vertices/normals/texcoords
+		int vertexindex; // vertex Vector
+		int tangentsindex; // tangents Vector
+
+		int numattachments;
+		int attachmentindex;
+
+		int colorindex;	// vertex color
+		// offset by colorindex number of bytes into vvc vertex colors
+		int uv2index;	// vertex second uv map
+		// offset by uv2index number of bytes into vvc secondary uv map
+	};
+
+
+	//
+	// Studio Header
+	//
+
 	struct studiohdr_v12_1_t
 	{
 		int id; // Model format ID, such as "IDST" (0x49 0x44 0x53 0x54)
@@ -242,7 +195,6 @@ namespace r5
 		int checksum; // This has to be the same in the phy and vtx files to load!
 		int sznameindex; // This has been moved from studiohdr2 to the front of the main header.
 		char name[64]; // The internal name of the model, padding with null chars.
-		// Typically "my_model.mdl" will have an internal name of "my_model"
 		int length; // Data size of MDL file in chars.
 
 		Vector eyeposition;	// ideal eye position
@@ -342,7 +294,7 @@ namespace r5
 		int boneStateCount;
 		inline const uint8_t* pBoneStates() const { return boneStateCount > 0 ? reinterpret_cast<uint8_t*>((char*)this + offsetof(studiohdr_v12_1_t, boneStateOffset) + boneStateOffset) : nullptr; }
 
-		int unk_v12_1; // related to vg likely
+		int unk_164; // added in v12.1, related to vg likely
 
 		int hwDataSize;
 
@@ -380,10 +332,10 @@ namespace r5
 
 		int linearboneindex;
 
-		// unsure what this is for but it exists for jigglbones
+		// used for adjusting weights in sequences, quick lookup into bones that have procbones, unsure what else uses this.
 		int procBoneCount;
-		int procBoneOffset;
-		int linearProcBoneOffset;
+		int procBoneOffset; // in order array of procbones and their parent bone indice
+		int linearProcBoneOffset; // byte per bone with indices into each bones procbone, 0xff if no procbone is present
 
 		// always "" or "Titan"
 		int unkStringOffset;
@@ -418,6 +370,15 @@ namespace r5
 		int vvwOffset; // index will come last after other vertex files
 		int vvwSize;
 	};
+
+
+	//
+	// VERSION 12.2
+	//
+
+	//
+	// Studio Header
+	//
 
 	struct studiohdr_v12_2_t
 	{
@@ -478,6 +439,7 @@ namespace r5
 
 		int numbodyparts;
 		int bodypartindex;
+		inline const mstudiobodyparts_t* pBodypart(int i) const { return reinterpret_cast<const mstudiobodyparts_t*>(reinterpret_cast<const char*>(this) + bodypartindex) + i; }
 
 		int numlocalattachments;
 		int localattachmentindex;
@@ -523,8 +485,9 @@ namespace r5
 
 		int boneStateOffset;
 		int boneStateCount;
+		inline const uint8_t* pBoneStates() const { return boneStateCount > 0 ? reinterpret_cast<uint8_t*>((char*)this + offsetof(studiohdr_v12_2_t, boneStateOffset) + boneStateOffset) : nullptr; }
 
-		int unk_v12_1; // related to vg likely
+		int unk_164; // added in v12.2, related to vg likely
 
 		int hwDataSize;
 
@@ -550,7 +513,7 @@ namespace r5
 		float flVertAnimFixedPointScale; // to be verified
 		int surfacepropLookup; // saved in the file
 
-		int unk_v12_2; // added in transition version
+		int unk_194; // added in 12.2
 
 		// this is in most shipped models, probably part of their asset bakery.
 		// doesn't actually need to be written pretty sure, only four chars when not present.
@@ -564,10 +527,10 @@ namespace r5
 
 		int linearboneindex;
 
-		// unsure what this is for but it exists for jigglbones
+		// used for adjusting weights in sequences, quick lookup into bones that have procbones, unsure what else uses this.
 		int procBoneCount;
-		int procBoneOffset;
-		int linearProcBoneOffset;
+		int procBoneOffset; // in order array of procbones and their parent bone indice
+		int linearProcBoneOffset; // byte per bone with indices into each bones procbone, 0xff if no procbone is present
 
 		// always "" or "Titan"
 		int unkStringOffset;
@@ -602,6 +565,37 @@ namespace r5
 		int vvwOffset; // index will come last after other vertex files
 		int vvwSize;
 	};
+
+
+	//
+	// VERSION 12.3
+	//
+
+	//
+	// Studio Animation
+	//
+
+	struct mstudioevent_v12_3_t
+	{
+		float cycle;
+		int	event;
+		int type; // this will be 0 if old style I'd imagine
+
+		int unk_C; // 2, 4, animseq/weapons/crypto_heirloom/ptpov_sword_crypto/draw.rseq
+
+		char options[256];
+
+		int szeventindex;
+	};
+
+
+	//
+	// VERSION 12.4
+	//
+	
+	//
+	// Studio Header
+	//
 
 	struct studiohdr_v12_4_t
 	{
@@ -708,8 +702,9 @@ namespace r5
 
 		int boneStateOffset;
 		int boneStateCount;
+		inline const uint8_t* pBoneStates() const { return boneStateCount > 0 ? reinterpret_cast<uint8_t*>((char*)this + offsetof(studiohdr_v12_4_t, boneStateOffset) + boneStateOffset) : nullptr; }
 
-		int unk_v12_1; // related to vg likely
+		int unk_164; // added in v12.1, related to vg likely
 
 		int hwDataSize;
 
@@ -724,7 +719,7 @@ namespace r5
 		// sets of lods
 		int groupHeaderOffset;
 		int groupHeaderCount;
-		const studio_hw_groupdata_v12_1_t* const pLODGroup(int i) const { return reinterpret_cast<studio_hw_groupdata_v12_1_t*>((char*)this + offsetof(studiohdr_v12_2_t, groupHeaderOffset) + groupHeaderOffset) + i; }
+		const studio_hw_groupdata_v12_1_t* const pLODGroup(int i) const { return reinterpret_cast<studio_hw_groupdata_v12_1_t*>((char*)this + offsetof(studiohdr_v12_4_t, groupHeaderOffset) + groupHeaderOffset) + i; }
 
 		int lodOffset;
 		int lodCount;  // check this
@@ -735,7 +730,7 @@ namespace r5
 		float flVertAnimFixedPointScale; // to be verified
 		int surfacepropLookup; // saved in the file
 
-		int unk_v12_2; // added in v12.2
+		int unk_194; // added in 12.2
 
 		// this is in most shipped models, probably part of their asset bakery.
 		// doesn't actually need to be written pretty sure, only four chars when not present.
@@ -787,9 +782,18 @@ namespace r5
 		int vvwOffset; // index will come last after other vertex files
 		int vvwSize;
 
-		/// might be related to those three at the end of v16 studiohdr, but I haven't seen them used in these versions
-		int unk_20C[2]; // added in rmdl v12.3
+		// might be related to those three at the end of v16 studiohdr, but I haven't seen them used in these versions
+		int unk_20C[2]; // added in rmdl v12.4
 	};
+
+
+	//
+	// VERSION 12.5
+	//
+	
+	//
+	// Studio Header
+	//
 
 	struct studiohdr_v12_5_t
 	{
@@ -896,8 +900,9 @@ namespace r5
 
 		int boneStateOffset;
 		int boneStateCount;
+		inline const uint8_t* pBoneStates() const { return boneStateCount > 0 ? reinterpret_cast<uint8_t*>((char*)this + offsetof(studiohdr_v12_5_t, boneStateOffset) + boneStateOffset) : nullptr; }
 
-		int unk_v12_1; // related to vg likely
+		int unk_164; // added in v12.1, related to vg likely
 
 		int hwDataSize;
 
@@ -912,7 +917,7 @@ namespace r5
 		// sets of lods
 		int groupHeaderOffset;
 		int groupHeaderCount;
-		const studio_hw_groupdata_v12_1_t* const pLODGroup(int i) const { return reinterpret_cast<studio_hw_groupdata_v12_1_t*>((char*)this + offsetof(studiohdr_v12_2_t, groupHeaderOffset) + groupHeaderOffset) + i; }
+		const studio_hw_groupdata_v12_1_t* const pLODGroup(int i) const { return reinterpret_cast<studio_hw_groupdata_v12_1_t*>((char*)this + offsetof(studiohdr_v12_5_t, groupHeaderOffset) + groupHeaderOffset) + i; }
 
 		int lodOffset;
 		int lodCount;  // check this
@@ -923,7 +928,7 @@ namespace r5
 		float flVertAnimFixedPointScale; // to be verified
 		int surfacepropLookup; // saved in the file
 
-		int unk_v12_2; // added in v12.2
+		int unk_194; // added in 12.2
 
 		// this is in most shipped models, probably part of their asset bakery.
 		// doesn't actually need to be written pretty sure, only four chars when not present.
@@ -975,11 +980,136 @@ namespace r5
 		int vvwOffset; // index will come last after other vertex files
 		int vvwSize;
 
-		/// might be related to those three at the end of v16 studiohdr, but I haven't seen them used in these versions
-		int unk_20C[2]; // added in rmdl v12.3
-		int unk_214;	// added in rmdl v12.4
+		// might be related to those three at the end of v16 studiohdr, but I haven't seen them used in these versions
+		int unk_20C[2]; // added in rmdl v12.4
+		int unk_214;	// added in rmdl v12.5
 	};
 
+
+	//
+	// VERSION 13
+	//
+	
+	// no known studio changes
+
+
+	//
+	// VERSION 13.1
+	//
+	
+	//
+	// Model Bodyparts
+	//
+
+	struct mstudiomodel_v13_1_t
+	{
+		inline const mstudiomodel_v12_1_t* const AsV12_1() const { return reinterpret_cast<const mstudiomodel_v12_1_t* const>(this); }
+
+		char name[64];
+
+		int unkStringOffset; // byte before string block
+
+		// it looks like they write the entire name
+		// then write over it with other values where needed
+		// why.
+		int type;
+
+		float boundingradius;
+
+		int nummeshes;
+		int meshindex;
+
+		// cache purposes
+		int numvertices; // number of unique vertices/normals/texcoords
+		int vertexindex; // vertex Vector
+		int tangentsindex; // tangents Vector
+
+		int numattachments;
+		int attachmentindex;
+
+		int colorindex;	// vertex color
+		// offset by colorindex number of bytes into vvc vertex colors
+		int uv2index;	// vertex second uv map
+		// offset by uv2index number of bytes into vvc secondary uv map
+
+		int uv3index;	// same as uv2index, probably replaces uv2 data
+	};
+
+
+	//
+	// VERSION 14
+	//
+
+	//
+	// Model Bodyparts
+	//
+
+	struct mstudiomesh_v14_t
+	{
+		uint16_t material;
+
+		uint16_t unk_2;	// unused in v14 as string gets written over it (mdl/vehicles_r5\land_med\msc_freight_tortus_mod\veh_land_msc_freight_tortus_mod_cargo_holder_v1_static.rmdl)
+		// seemingly added in v14, but unused in v14/15, maybe this carried over to v16?
+
+		int modelindex;
+
+		int numvertices; // number of unique vertices/normals/texcoords
+		int vertexoffset; // vertex mstudiovertex_t
+		// offset by vertexoffset number of verts into vvd vertexes, relative to the models offset
+
+		// a unique ordinal for this mesh
+		int meshid;
+
+		Vector center;
+
+		mstudio_meshvertexloddata_t vertexloddata;
+
+		void* unk_44; // unknown memory pointer, probably one of the older vertex pointers but moved
+	};
+	static_assert(sizeof(mstudiomesh_v14_t) == 0x4C);
+
+	struct mstudiomodel_v14_t
+	{
+		char name[64];
+
+		int unkStringOffset; // byte before string block
+
+		// they write over these two when it's the default
+		int type;
+
+		float boundingradius;
+
+		int meshCountTotal;
+		int meshCountBase;
+		int meshCountBlends;
+
+		int meshindex;
+		mstudiomesh_v14_t* pMesh(int i) const
+		{
+			return reinterpret_cast<mstudiomesh_v14_t*>((char*)this + meshindex) + i;
+		}
+
+		// most of these vtx, vvd, vvc, and vg indexes are depreciated after v14.1 (s14)
+
+		// cache purposes
+		int numvertices; // number of unique vertices/normals/texcoords
+		int vertexindex; // vertex Vector
+		int tangentsindex; // tangents Vector
+
+		int numattachments;
+		int attachmentindex;
+
+		int colorindex;	// vertex color
+		int uv2index;	// vertex second uv map
+		int uv3index;	// vertex third uv map
+	};
+
+
+	//
+	// Studio Header
+	//
+
+	struct mstudiobodyparts_v15_t;
 	struct studiohdr_v14_t
 	{
 		int id; // Model format ID, such as "IDST" (0x49 0x44 0x53 0x54)
@@ -987,8 +1117,8 @@ namespace r5
 		int checksum; // This has to be the same in the phy and vtx files to load!
 		int sznameindex; // This has been moved from studiohdr2 to the front of the main header.
 		char name[64]; // The internal name of the model, padding with null chars.
+		// Typically "my_model.mdl" will have an internal name of "my_model"
 		int length; // Data size of MDL file in chars.
-		inline const char* pszName() const { return ((char*)this + sznameindex); }
 
 		Vector eyeposition;	// ideal eye position
 
@@ -1018,7 +1148,7 @@ namespace r5
 		int numlocalseq; // sequences
 		int	localseqindex;
 
-		int unk_v14[2]; // added in v13 -> v14
+		int unk_C8[2]; // added in v13 -> v14
 
 		int activitylistversion; // initialization flag - have the sequences been indexed?
 
@@ -1042,7 +1172,7 @@ namespace r5
 		int numbodyparts;
 		int bodypartindex;
 		inline const mstudiobodyparts_t* pBodypart(int i) const { return reinterpret_cast<const mstudiobodyparts_t*>(reinterpret_cast<const char*>(this) + bodypartindex) + i; }
-		inline const mstudiobodyparts_v15_t* pBodypart_V15(int i) const { return reinterpret_cast<const mstudiobodyparts_v15_t*>(reinterpret_cast<const char*>(this) + bodypartindex) + i; }
+		inline const mstudiobodyparts_v15_t* pBodypart_V15(int i) const;
 
 		int numlocalattachments;
 		int localattachmentindex;
@@ -1090,7 +1220,7 @@ namespace r5
 		int boneStateCount;
 		inline const uint8_t* pBoneStates() const { return boneStateCount > 0 ? reinterpret_cast<uint8_t*>((char*)this + offsetof(studiohdr_v14_t, boneStateOffset) + boneStateOffset) : nullptr; }
 
-		int unk_v12_1; // related to vg likely
+		int unk_16C; // added in v12.1, related to vg likely
 
 		int hwDataSize;
 
@@ -1116,7 +1246,7 @@ namespace r5
 		float flVertAnimFixedPointScale; // to be verified
 		int surfacepropLookup; // saved in the file
 
-		int unk_v12_2; // added in v12.2
+		int unk_19C; // added in 12.2
 
 		// this is in most shipped models, probably part of their asset bakery.
 		// doesn't actually need to be written pretty sure, only four chars when not present.
@@ -1130,10 +1260,10 @@ namespace r5
 
 		int linearboneindex;
 
-		// unsure what this is for but it exists for jigglbones
+		// used for adjusting weights in sequences, quick lookup into bones that have procbones, unsure what else uses this.
 		int procBoneCount;
-		int procBoneOffset;
-		int linearProcBoneOffset;
+		int procBoneOffset; // in order array of procbones and their parent bone indice
+		int linearProcBoneOffset; // byte per bone with indices into each bones procbone, 0xff if no procbone is present
 
 		// always "" or "Titan"
 		int unkStringOffset;
@@ -1168,6 +1298,34 @@ namespace r5
 		int vvwOffset; // index will come last after other vertex files
 		int vvwSize;
 
-		int unk_v12_3[3]; // added in rmdl v12.3
+		// might be related to those three at the end of v16 studiohdr, but I haven't seen them used in these versions
+		int unk_214[2]; // added in rmdl v12.4
+		int unk_21C;	// added in rmdl v12.5
 	};
+
+
+	//
+	// VERSION 15
+	//
+
+	//
+	// Model Bodyparts
+	//
+
+	struct mstudiobodyparts_v15_t
+	{
+		int sznameindex;
+		int nummodels;
+		int base;
+		int modelindex; // index into models array
+
+		int unk_10;
+		int meshOffset; // offset to this bodyparts meshes
+
+		inline const mstudiobodyparts_t* const AsV8() const { return reinterpret_cast<const mstudiobodyparts_t* const>(this); }
+	};
+
+	inline const mstudiobodyparts_v15_t* studiohdr_v14_t::pBodypart_V15(int i) const { return reinterpret_cast<const mstudiobodyparts_v15_t*>(reinterpret_cast<const char*>(this) + bodypartindex) + i; }
+
 }
+#pragma pack(pop)

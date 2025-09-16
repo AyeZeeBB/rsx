@@ -1,6 +1,7 @@
 #include <pch.h>
 
 #include <core/mdl/smd.h>
+#include <core/utils/textbuffer.h>
 
 namespace smd
 {
@@ -115,5 +116,80 @@ namespace smd
 		}
 
 		out.close();
+	}
+
+	const bool CSourceModelData::Write(char* const buffer, const size_t size) const
+	{
+		if (!buffer || !size)
+			return false;
+
+		CTextBuffer textBuffer(buffer, size);
+		textBuffer.SetTextStart();
+
+		textBuffer.WriteString("version 1\n");
+		textBuffer.WriteString("nodes\n");
+
+		for (size_t i = 0; i < numNodes; i++)
+		{
+			const Node& node = nodes[i];
+			textBuffer.WriteFormated("\t%i \"%s\" %i\n", node.index, node.name, node.parent);
+		}
+		textBuffer.WriteString("end\n");
+
+		textBuffer.WriteString("skeleton\n");
+		for (size_t iframe = 0; iframe < numFrames; iframe++)
+		{
+			const Frame& frame = frames[iframe];
+
+			textBuffer.WriteFormated("\ttime %llu\n", iframe);
+
+			for (const Bone& bone : frame.bones)
+			{
+				textBuffer.WriteFormated("\t\t%i %f %f %f %f %f %f\n", bone.node, bone.pos.x, bone.pos.y, bone.pos.z, bone.rot.x, bone.rot.y, bone.rot.z);
+			}
+		}
+		textBuffer.WriteString("end\n");
+
+		if (triangles.size())
+		{
+			textBuffer.WriteString("triangles\n");
+			for (size_t itriangle = 0; itriangle < triangles.size(); itriangle++)
+			{
+				const Triangle& triangle = triangles[itriangle];
+
+				textBuffer.WriteFormated("%s\n", triangle.material);
+
+				for (int vertIdx = 0; vertIdx < 3; vertIdx++)
+				{
+					const Vertex& vert = triangle.vertices[vertIdx];
+
+					// bone, pos xyz, normal xyz, texcoord xy, weight count 
+					textBuffer.WriteFormated("\t%i %f %f %f %f %f %f %f %f %i", vert.bone[0],
+						vert.position.x, vert.position.y, vert.position.z,
+						vert.normal.x, vert.normal.y, vert.normal.z,
+						vert.texcoords[0].x, vert.texcoords[0].y, vert.numBones);
+
+					for (int weightIdx = 0; weightIdx < vert.numBones; weightIdx++)
+						textBuffer.WriteFormated(" %i %f", vert.bone[weightIdx], vert.weight[weightIdx]);
+
+					textBuffer.WriteCharacter('\n');
+				}
+			}
+			textBuffer.WriteString("end\n");
+		}
+
+		std::filesystem::path outPath(exportPath);
+		outPath.append(exportName);
+		outPath.replace_extension(".smd");
+
+#ifndef STREAMIO
+		std::ofstream file(outPath);
+		file.write(textBuffer.Text(), textBuffer.TextLength());
+#else
+		StreamIO file(outPath, eStreamIOMode::Write);
+		file.write(textBuffer.Text(), textBuffer.TextLength());
+#endif // !STREAMIO
+
+		return true;
 	}
 }

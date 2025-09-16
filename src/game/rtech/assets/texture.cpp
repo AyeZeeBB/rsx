@@ -3,6 +3,7 @@
 #include <core/render/dx.h>
 #include <thirdparty/imgui/imgui.h>
 
+extern CDXParentHandler* g_dxHandler;
 extern ExportSettings_t g_ExportSettings;
 
 inline std::string FormatTextureAssetName(const char* const str)
@@ -353,7 +354,6 @@ void PostLoadTextureAsset(CAssetContainer* container, CAsset* asset)
         pakAsset->SetAssetNameFromCache();
 }
 
-extern CDXParentHandler* g_dxHandler;
 std::shared_ptr<CTexture> CreateTextureFromMip(CPakAsset* const asset, const TextureMip_t* const mip, const DXGI_FORMAT format, const size_t arrayIdx)
 {
     if (format == DXGI_FORMAT::DXGI_FORMAT_UNKNOWN)
@@ -659,7 +659,7 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
 
     
 
-    const CTexture* const selectedMipTxtr = selectedMipTexture.get();
+    CTexture* const selectedMipTxtr = selectedMipTexture.get();
     if (selectedMipTxtr)
     {
         const float aspectRatio = static_cast<float>(selectedMipTxtr->GetWidth()) / selectedMipTxtr->GetHeight();

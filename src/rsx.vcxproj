@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -14,6 +14,7 @@
     <ClInclude Include="core\cache\cachedb.h" />
     <ClInclude Include="core\crashhandler.h" />
     <ClInclude Include="core\mdl\modeldata.h" />
+    <ClInclude Include="core\mdl\qc.h" />
     <ClInclude Include="core\mdl\smd.h" />
     <ClInclude Include="core\render\dx.h" />
     <ClInclude Include="core\render\dxscene.h" />
@@ -43,6 +44,7 @@
     <ClInclude Include="core\utils\exportsettings.h" />
     <ClInclude Include="core\utils\fileio.h" />
     <ClInclude Include="core\utils\ramen.h" />
+    <ClInclude Include="core\utils\textbuffer.h" />
     <ClInclude Include="core\utils\thread.h" />
     <ClInclude Include="core\utils\utils_general.h" />
     <ClInclude Include="core\window.h" />
@@ -95,7 +97,6 @@
     <ClInclude Include="game\rtech\utils\studio\studio_r5.h" />
     <ClInclude Include="game\rtech\utils\studio\studio_r5_v12.h" />
     <ClInclude Include="game\rtech\utils\studio\studio_r5_v16.h" />
-    <ClInclude Include="game\rtech\utils\studio\studio_r5_v8.h" />
     <ClInclude Include="game\rtech\utils\utils.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="resource.h" />
@@ -119,6 +120,7 @@
     <ClCompile Include="core\filehandling\list.cpp" />
     <ClCompile Include="core\filehandling\mbnk.cpp" />
     <ClCompile Include="core\mdl\modeldata.cpp" />
+    <ClCompile Include="core\mdl\qc.cpp" />
     <ClCompile Include="core\mdl\smd.cpp" />
     <ClCompile Include="core\render\dx.cpp" />
     <ClCompile Include="core\render\dxscene.cpp" />
@@ -138,6 +140,7 @@
     <ClCompile Include="core\mdl\rmax.cpp" />
     <ClCompile Include="core\mdl\stringtable.cpp" />
     <ClCompile Include="core\render.cpp" />
+    <ClCompile Include="core\render\dxutils.cpp" />
     <ClCompile Include="core\splash.cpp" />
     <ClCompile Include="core\utils\fileio.cpp" />
     <ClCompile Include="core\utils\ramen.cpp" />

@@ -4,7 +4,7 @@
 
 namespace r1
 {
-	void ExtractAnimValue(int frame, mstudioanimvalue_t* panimvalue, float scale, float& v1, float& v2)
+	void ExtractAnimValue(int frame, const mstudioanimvalue_t* panimvalue, float scale, float& v1, float& v2)
 	{
 		if (!panimvalue)
 		{
@@ -75,7 +75,7 @@ namespace r1
 		}
 	}
 
-	void ExtractAnimValue(int frame, mstudioanimvalue_t* panimvalue, float scale, float& v1)
+	void ExtractAnimValue(int frame, const mstudioanimvalue_t* panimvalue, float scale, float& v1)
 	{
 		if (!panimvalue)
 		{

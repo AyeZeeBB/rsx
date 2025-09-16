@@ -5,7 +5,7 @@
 #include <game/rtech/cpakfile.h>
 #include <game/rtech/utils\utils.h>
 
-#define ImGuiReadSetting(str, var, a)  if (sscanf_s(line, str, &a) == 1) { var = a; }
+#define ImGuiReadSetting(str, var, a, type)  if (sscanf_s(line, str, &a) == 1) { var = static_cast<type>(a); }
 
 extern ExportSettings_t g_ExportSettings;
 extern PreviewSettings_t g_PreviewSettings;
@@ -38,7 +38,7 @@ static void AssetSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandler
         int* const exportSetting = static_cast<int*>(entry);
 
         int i;
-        ImGuiReadSetting("Setting=%u", *exportSetting, i);
+        ImGuiReadSetting("Setting=%i", *exportSetting, i, int);
     }
 }
 
@@ -75,8 +75,8 @@ static void UtilSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandler*
         ImGuiHandler::UtilsSettings_t* const cfg = static_cast<ImGuiHandler::UtilsSettings_t*>(entry);
 
         uint32_t i;
-        ImGuiReadSetting("ExportThreads=%u", cfg->exportThreadCount, i);
-        ImGuiReadSetting("ParseThreads=%u", cfg->parseThreadCount, i);
+        ImGuiReadSetting("ExportThreads=%u", cfg->exportThreadCount, i, uint32_t);
+        ImGuiReadSetting("ParseThreads=%u", cfg->parseThreadCount, i, uint32_t);
     }
 }
 
@@ -84,7 +84,7 @@ static void UtilSettings_WriteAll(ImGuiContext* const ctx, ImGuiSettingsHandler*
 {
     UNUSED(ctx);
 
-    buf->reserve(buf->size() + 50);
+    buf->reserve(buf->size() + 64);
     buf->appendf("[%s][utils]\n", handler->TypeName );
     buf->appendf("ExportThreads=%u\n", UtilsConfig->exportThreadCount);
     buf->appendf("ParseThreads=%u\n", UtilsConfig->parseThreadCount);
@@ -111,14 +111,19 @@ static void ExportSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandle
         ExportSettings_t* const settings = static_cast<ExportSettings_t*>(entry);
 
         int i;
-        ImGuiReadSetting("ExportPathsFull=%i",              settings->exportPathsFull, i);
-        ImGuiReadSetting("ExportAssetDeps=%i",              settings->exportAssetDeps, i);
-        ImGuiReadSetting("ExportRigSequences=%i",           settings->exportRigSequences, i);
-        ImGuiReadSetting("ExportModelSkin=%i",              settings->exportModelSkin, i);
-        ImGuiReadSetting("ExportMaterialTextures=%i",       settings->exportMaterialTextures, i);
+        ImGuiReadSetting("ExportPathsFull=%i",              settings->exportPathsFull, i, int);
+        ImGuiReadSetting("ExportAssetDeps=%i",              settings->exportAssetDeps, i, int);
 
-        ImGuiReadSetting("ExportTextureNameSetting=%i",     settings->exportTextureNameSetting, i);
-        ImGuiReadSetting("ExportNormalRecalcSetting=%i",    settings->exportNormalRecalcSetting, i);
+        ImGuiReadSetting("ExportTextureNameSetting=%u",     settings->exportTextureNameSetting, i, uint32_t);
+        ImGuiReadSetting("ExportNormalRecalcSetting=%u",    settings->exportNormalRecalcSetting, i, uint32_t);
+        ImGuiReadSetting("ExportMaterialTextures=%i",       settings->exportMaterialTextures, i, int);
+
+        ImGuiReadSetting("QCMajorVersion=%u",               settings->qcMajorVersion, i, uint16_t);
+        ImGuiReadSetting("QCMinorVersion=%u",               settings->qcMinorVersion, i, uint16_t);
+
+        ImGuiReadSetting("ExportRigSequences=%i",           settings->exportRigSequences, i, int);
+        ImGuiReadSetting("ExportModelSkin=%i",              settings->exportModelSkin, i, int);
+        ImGuiReadSetting("ExportTruncatedMaterials=%i",     settings->exportModelMatsTruncated, i, int);
     }
 }
 
@@ -126,17 +131,23 @@ static void ExportSettings_WriteAll(ImGuiContext* const ctx, ImGuiSettingsHandle
 {
     UNUSED(ctx);
 
-    buf->reserve(buf->size() + 256);
+    buf->reserve(buf->size() + (48 * 10));
     buf->appendf("[%s][general]\n", handler->TypeName);
     
     buf->appendf("ExportPathsFull=%i\n",            g_ExportSettings.exportPathsFull);
     buf->appendf("ExportAssetDeps=%i\n",            g_ExportSettings.exportAssetDeps);
-    buf->appendf("ExportRigSequences=%i\n",         g_ExportSettings.exportRigSequences);
-    buf->appendf("ExportModelSkin=%i\n",            g_ExportSettings.exportModelSkin);
+
+    buf->appendf("ExportTextureNameSetting=%u\n",   g_ExportSettings.exportTextureNameSetting);
+    buf->appendf("ExportNormalRecalcSetting=%u\n",  g_ExportSettings.exportNormalRecalcSetting);
     buf->appendf("ExportMaterialTextures=%i\n",     g_ExportSettings.exportMaterialTextures);
 
-    buf->appendf("ExportTextureNameSetting=%i\n",   g_ExportSettings.exportTextureNameSetting);
-    buf->appendf("ExportNormalRecalcSetting=%i\n",  g_ExportSettings.exportNormalRecalcSetting);
+    buf->appendf("QCMajorVersion=%u\n",             g_ExportSettings.qcMajorVersion);
+    buf->appendf("QCMinorVersion=%u\n",             g_ExportSettings.qcMinorVersion);
+
+    buf->appendf("ExportRigSequences=%i\n",         g_ExportSettings.exportRigSequences);
+    buf->appendf("ExportModelSkin=%i\n",            g_ExportSettings.exportModelSkin);
+    buf->appendf("ExportTruncatedMaterials=%i\n",   g_ExportSettings.exportModelMatsTruncated);
+
 
     // [rika]: there is no reason the other settings could not be saved in the future, it just seemed unneeded to save them for now.
 
@@ -163,8 +174,8 @@ static void PreviewSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandl
         PreviewSettings_t* const settings = static_cast<PreviewSettings_t*>(entry);
 
         float i;
-        ImGuiReadSetting("PreviewCullDistance=%f",  settings->previewCullDistance, i);
-        ImGuiReadSetting("PreviewMovementSpeed=%f", settings->previewMovementSpeed, i);;
+        ImGuiReadSetting("PreviewCullDistance=%f",  settings->previewCullDistance, i, float);
+        ImGuiReadSetting("PreviewMovementSpeed=%f", settings->previewMovementSpeed, i, float);
     }
 }
 

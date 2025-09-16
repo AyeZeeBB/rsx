@@ -339,9 +339,6 @@
     <ClInclude Include="game\rtech\utils\studio\studio_r2.h">
       <Filter>game\rtech\utils\studio</Filter>
     </ClInclude>
-    <ClInclude Include="game\rtech\utils\studio\studio_r5_v8.h">
-      <Filter>game\rtech\utils\studio</Filter>
-    </ClInclude>
     <ClInclude Include="game\rtech\utils\studio\studio_r5_v12.h">
       <Filter>game\rtech\utils\studio</Filter>
     </ClInclude>
@@ -389,6 +386,12 @@
     </ClInclude>
     <ClInclude Include="game\rtech\assets\lcd_screen_effect.h">
       <Filter>game\rtech\assets</Filter>
+    </ClInclude>
+    <ClInclude Include="core\mdl\qc.h">
+      <Filter>core\mdl</Filter>
+    </ClInclude>
+    <ClInclude Include="core\utils\textbuffer.h">
+      <Filter>core\utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -656,6 +659,10 @@
     <ClCompile Include="game\rtech\assets\lcd_screen_effect.cpp">
       <Filter>game\rtech\assets</Filter>
     </ClCompile>
+    <ClCompile Include="core\mdl\qc.cpp">
+      <Filter>core\mdl</Filter>
+    </ClCompile>
+    <ClCompile Include="core\render\dxutils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />

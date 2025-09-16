@@ -95,10 +95,14 @@ struct ModelMeshData_t
 
 struct ModelModelData_t
 {
+	ModelModelData_t() : meshes(nullptr), meshIndex(0), meshCount(0), vertCount(0) {}
+
 	std::string name;
 	ModelMeshData_t* meshes;
 	size_t meshIndex;
 	uint32_t meshCount;
+
+	uint32_t vertCount; // used to determine if this model is disabled in a LOD, as traditional methods (via VTX) will not work for most apex models
 };
 
 struct ModelLODData_t
@@ -115,6 +119,8 @@ struct ModelLODData_t
 
 	inline const int GetMeshCount() const { return static_cast<int>(meshes.size()); }
 	inline const int GetModelCount() const { return static_cast<int>(models.size()); }
+
+	inline const ModelModelData_t* const pModel(const size_t i) const { return &models.at(i); }
 };
 
 struct ModelBone_t
@@ -185,14 +191,93 @@ struct ModelBone_t
 struct ModelAttachment_t
 {
 	ModelAttachment_t() = default;
-	ModelAttachment_t(const r5::mstudioattachment_v8_t* const attachment) : name(attachment->pszName()), flags(attachment->flags), localbone(attachment->localbone), localmatrix(&attachment->localmatrix) {}
-	ModelAttachment_t(const r5::mstudioattachment_v16_t* const attachment) : name(attachment->pszName()), flags(attachment->flags), localbone(attachment->localbone), localmatrix(&attachment->localmatrix) {}
+	ModelAttachment_t(const mstudioattachment_t* const attachment) : name(attachment->pszName()), flags(attachment->flags), localbone(attachment->localbone), localmatrix(&attachment->local) {}
+	ModelAttachment_t(const r5::mstudioattachment_v8_t* const attachment) : name(attachment->pszName()), flags(attachment->flags), localbone(attachment->localbone), localmatrix(&attachment->local) {}
+	ModelAttachment_t(const r5::mstudioattachment_v16_t* const attachment) : name(attachment->pszName()), flags(attachment->flags), localbone(attachment->localbone), localmatrix(&attachment->local) {}
 
 	const char* name;
 	int flags;
 
 	int localbone;
 	const matrix3x4_t* localmatrix;
+};
+
+struct ModelHitbox_t
+{
+	ModelHitbox_t() = default;
+	ModelHitbox_t(const mstudiobbox_t* const bbox) : bone(bbox->bone), group(bbox->group), bbmin(&bbox->bbmin), bbmax(&bbox->bbmax), name(bbox->pszHitboxName()), forceCritPoint(0) {}
+	ModelHitbox_t(const r2::mstudiobbox_t* const bbox) : bone(bbox->bone), group(bbox->group), bbmin(&bbox->bbmin), bbmax(&bbox->bbmax), name(bbox->pszHitboxName()), forceCritPoint(bbox->forceCritPoint) {}
+	ModelHitbox_t(const r5::mstudiobbox_v8_t* const bbox) : bone(bbox->bone), group(bbox->group), bbmin(&bbox->bbmin), bbmax(&bbox->bbmax), name(bbox->pszHitboxName()), forceCritPoint(bbox->forceCritPoint) {}
+	ModelHitbox_t(const r5::mstudiobbox_v16_t* const bbox) : bone(bbox->bone), group(bbox->group), bbmin(&bbox->bbmin), bbmax(&bbox->bbmax), name(bbox->pszHitboxName()), forceCritPoint(0) {}
+
+	int bone;
+	int group;
+	const Vector* bbmin;
+	const Vector* bbmax;
+	const char* name;
+
+	int forceCritPoint;
+};
+
+struct ModelHitboxSet_t
+{
+	ModelHitboxSet_t(const mstudiohitboxset_t* const hitboxset, const mstudiobbox_t* const bboxes) : name(hitboxset->pszName()), hitboxes(nullptr), numHitboxes(hitboxset->numhitboxes)
+	{
+		if (!numHitboxes)
+			return;
+
+		hitboxes = new ModelHitbox_t[numHitboxes]{};
+
+		for (int i = 0; i < numHitboxes; i++)
+		{
+			hitboxes[i] = ModelHitbox_t(bboxes + i);
+		}
+	};
+	ModelHitboxSet_t(const mstudiohitboxset_t* const hitboxset, const r2::mstudiobbox_t* const bboxes) : name(hitboxset->pszName()), hitboxes(nullptr), numHitboxes(hitboxset->numhitboxes)
+	{
+		if (!numHitboxes)
+			return;
+
+		hitboxes = new ModelHitbox_t[numHitboxes]{};
+
+		for (int i = 0; i < numHitboxes; i++)
+		{
+			hitboxes[i] = ModelHitbox_t(bboxes + i);
+		}
+	};
+	ModelHitboxSet_t(const mstudiohitboxset_t* const hitboxset, const r5::mstudiobbox_v8_t* const bboxes) : name(hitboxset->pszName()), hitboxes(nullptr), numHitboxes(hitboxset->numhitboxes)
+	{
+		if (!numHitboxes)
+			return;
+
+		hitboxes = new ModelHitbox_t[numHitboxes]{};
+
+		for (int i = 0; i < numHitboxes; i++)
+		{
+			hitboxes[i] = ModelHitbox_t(bboxes + i);
+		}
+	};
+	ModelHitboxSet_t(const r5::mstudiohitboxset_v16_t* const hitboxset) : name(hitboxset->pszName()), hitboxes(nullptr), numHitboxes(hitboxset->numhitboxes)
+	{
+		if (!numHitboxes)
+			return;
+
+		hitboxes = new ModelHitbox_t[numHitboxes]{};
+
+		for (int i = 0; i < numHitboxes; i++)
+		{
+			hitboxes[i] = ModelHitbox_t(hitboxset->pHitbox(i));
+		}
+	};
+
+	~ModelHitboxSet_t()
+	{
+		FreeAllocArray(hitboxes);
+	}
+
+	const char* name;
+	ModelHitbox_t* hitboxes;
+	int numHitboxes;
 };
 
 struct ModelMaterialData_t
@@ -212,6 +297,17 @@ struct ModelMaterialData_t
 
 	inline MaterialAsset* const GetMaterialAsset() const { return asset ? reinterpret_cast<MaterialAsset* const>(asset->extraData()) : nullptr; }
 
+	// use 'true' to prefer studio model name, use 'false' for material asset name
+	const char* const GetName(const bool biasStudio) const
+	{
+		// [rika]: if we don't prefer studio name, or studio name is generated, return material name if it exists
+		if ((!biasStudio || IsAllocated()) && GetMaterialAsset())
+			return GetMaterialAsset()->name;
+
+		// [rika]: prefer studio name, or return generated name if the material did not exist
+		return name;
+	}
+
 	// [rika]: originally had this as one function but it's wasted performance to check in cases it'd never happen
 	inline void SetName(const char* const str)
 	{
@@ -228,6 +324,8 @@ struct ModelMaterialData_t
 		stored = buf;
 		name = stored;
 	}
+
+	inline const bool IsAllocated() const { return stored ? true : false; }
 };
 
 struct ModelSkinData_t
@@ -242,7 +340,7 @@ struct ModelBodyPart_t
 {
 	ModelBodyPart_t() : partName(), modelIndex(-1), numModels(0), previewEnabled(true) {};
 
-	std::string partName;
+	std::string partName; // c string?
 
 	int modelIndex;
 	int numModels;
@@ -271,23 +369,122 @@ struct ModelAnimSequence_t
 	FORCEINLINE const bool IsLoaded() const { return type != eType::UNLOADED; };
 };
 
+struct ModelPoseParam_t
+{
+	ModelPoseParam_t() : name(nullptr), flags(0), start(0.0f), end(0.0f), loop(0.0f) {}
+	ModelPoseParam_t(const mstudioposeparamdesc_t* const poseparam) : name(poseparam->pszName()), flags(poseparam->flags), start(poseparam->start), end(poseparam->end), loop(poseparam->loop) {}
+	ModelPoseParam_t(const r5::mstudioposeparamdesc_v16_t* const poseparam) : name(poseparam->pszName()), flags(poseparam->flags), start(poseparam->start), end(poseparam->end), loop(poseparam->loop) {}
+
+	const char* name;
+
+	int flags;
+	float start;
+	float end;
+	float loop;
+};
+
+struct ModelIKLock_t
+{
+	ModelIKLock_t() = default;
+	ModelIKLock_t(const mstudioiklock_t* const iklock) : chain(iklock->chain), flPosWeight(iklock->flPosWeight), flLocalQWeight(iklock->flLocalQWeight), flags(iklock->flags) {}
+	ModelIKLock_t(const r5::mstudioiklock_v8_t* const iklock) : chain(iklock->chain), flPosWeight(iklock->flPosWeight), flLocalQWeight(iklock->flLocalQWeight), flags(iklock->flags) {}
+	ModelIKLock_t(const r5::mstudioiklock_v16_t* const iklock) : chain(iklock->chain), flPosWeight(iklock->flPosWeight), flLocalQWeight(iklock->flLocalQWeight), flags(iklock->flags) {}
+
+	int chain;
+	float flPosWeight;
+	float flLocalQWeight;
+	int flags;
+};
+
+struct ModelIKLink_t
+{
+	ModelIKLink_t() = default;
+	ModelIKLink_t(const mstudioiklink_t* const iklink) : bone(iklink->bone), kneeDir(iklink->kneeDir) {}
+	ModelIKLink_t(const r5::mstudioiklink_v8_t* const iklink) : bone(iklink->bone), kneeDir(iklink->kneeDir) {}
+	ModelIKLink_t(const r5::mstudioiklink_v16_t* const iklink) : bone(iklink->bone), kneeDir(iklink->kneeDir) {}
+
+	int bone;
+	Vector kneeDir;
+};
+
+struct ModelIKChain_t
+{
+	ModelIKChain_t() = default;
+	ModelIKChain_t(const mstudioikchain_t* const ikchain) : name(ikchain->pszName()), unk_10(0.0f)
+	{
+		assertm(ikchain->numlinks == 3, "ikchain was abnormal");
+		assertm(ikchain->linktype == 0, "ikchain was abnormal");
+
+		links[0] = ModelIKLink_t(ikchain->pLink(0));
+		links[1] = ModelIKLink_t(ikchain->pLink(1));
+		links[2] = ModelIKLink_t(ikchain->pLink(2));
+	}
+	ModelIKChain_t(const r2::mstudioikchain_t* const ikchain) : name(ikchain->pszName()), unk_10(ikchain->unk_10)
+	{
+		assertm(ikchain->numlinks == 3, "ikchain was abnormal");
+		assertm(ikchain->linktype == 0, "ikchain was abnormal");
+
+		links[0] = ModelIKLink_t(ikchain->pLink(0));
+		links[1] = ModelIKLink_t(ikchain->pLink(1));
+		links[2] = ModelIKLink_t(ikchain->pLink(2));
+	}
+	ModelIKChain_t(const r5::mstudioikchain_v8_t* const ikchain) : name(ikchain->pszName()), unk_10(ikchain->unk_10)
+	{
+		assertm(ikchain->numlinks == 3, "ikchain was abnormal");
+		assertm(ikchain->linktype == 0, "ikchain was abnormal");
+
+		links[0] = ModelIKLink_t(ikchain->pLink(0));
+		links[1] = ModelIKLink_t(ikchain->pLink(1));
+		links[2] = ModelIKLink_t(ikchain->pLink(2));
+	}
+	ModelIKChain_t(const r5::mstudioikchain_v16_t* const ikchain) : name(ikchain->pszName()), unk_10(ikchain->unk_10)
+	{
+		assertm(ikchain->numlinks == 3, "ikchain was abnormal");
+		assertm(ikchain->linktype == 0, "ikchain was abnormal");
+
+		links[0] = ModelIKLink_t(ikchain->pLink(0));
+		links[1] = ModelIKLink_t(ikchain->pLink(1));
+		links[2] = ModelIKLink_t(ikchain->pLink(2));
+	}
+
+	enum LinkType_t
+	{
+		IKLINK_THIGH,
+		IKLINK_KNEE,
+		IKLINK_FOOT,
+
+		IKLINK_COUNT
+	};
+
+	const char* name;
+	float unk_10;
+
+	uint32_t pad;
+
+	// while this could be dynamic, it's hardcoded throughout all of source and reSource to assume it's 3
+	// I'd imagine the original intent was to add more types with varied links, but that never happened
+	ModelIKLink_t links[IKLINK_COUNT];
+};
+
+
 class ModelParsedData_t
 {
 public:
 	ModelParsedData_t() = default;
-	ModelParsedData_t(r1::studiohdr_t* const hdr, StudioLooseData_t* const data) : sequences(nullptr), studiohdr(hdr, data) {};
-	ModelParsedData_t(r2::studiohdr_t* const hdr) : sequences(nullptr), studiohdr(hdr) {};
-	ModelParsedData_t(r5::studiohdr_v8_t* const hdr) : sequences(nullptr), studiohdr(hdr) {};
-	ModelParsedData_t(r5::studiohdr_v12_1_t* const hdr) : sequences(nullptr), studiohdr(hdr) {};
-	ModelParsedData_t(r5::studiohdr_v12_2_t* const hdr) : sequences(nullptr), studiohdr(hdr) {};
-	ModelParsedData_t(r5::studiohdr_v12_4_t* const hdr) : sequences(nullptr), studiohdr(hdr) {};
-	ModelParsedData_t(r5::studiohdr_v14_t* const hdr) : sequences(nullptr), studiohdr(hdr) {};
-	ModelParsedData_t(r5::studiohdr_v16_t* const hdr, const int dataSizePhys, const int dataSizeModel) : sequences(nullptr), studiohdr(hdr, dataSizePhys, dataSizeModel) {};
-	ModelParsedData_t(r5::studiohdr_v17_t* const hdr, const int dataSizePhys, const int dataSizeModel) : sequences(nullptr), studiohdr(hdr, dataSizePhys, dataSizeModel) {};
+	ModelParsedData_t(r1::studiohdr_t* const hdr, StudioLooseData_t* const data) : sequences(nullptr), ikchains(nullptr), iklocks(nullptr), poseparams(nullptr), studiohdr(hdr, data) {};
+	ModelParsedData_t(r2::studiohdr_t* const hdr) : sequences(nullptr), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr) {};
+	ModelParsedData_t(r5::studiohdr_v8_t* const hdr) : sequences(nullptr), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr) {};
+	ModelParsedData_t(r5::studiohdr_v12_1_t* const hdr) : sequences(nullptr), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr) {};
+	ModelParsedData_t(r5::studiohdr_v12_2_t* const hdr) : sequences(nullptr), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr) {};
+	ModelParsedData_t(r5::studiohdr_v12_4_t* const hdr) : sequences(nullptr), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr) {};
+	ModelParsedData_t(r5::studiohdr_v14_t* const hdr) : sequences(nullptr), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr) {};
+	ModelParsedData_t(r5::studiohdr_v16_t* const hdr, const int dataSizePhys, const int dataSizeModel) : sequences(nullptr), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr, dataSizePhys, dataSizeModel) {};
+	ModelParsedData_t(r5::studiohdr_v17_t* const hdr, const int dataSizePhys, const int dataSizeModel) : sequences(nullptr), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr, dataSizePhys, dataSizeModel) {};
 
 	~ModelParsedData_t()
 	{
 		FreeAllocArray(sequences);
+		FreeAllocArray(poseparams);
 	}
 
 	ModelParsedData_t& operator=(ModelParsedData_t&& parsed)
@@ -296,6 +493,8 @@ public:
 		{
 			this->meshVertexData.move(parsed.meshVertexData);
 			this->bones.swap(parsed.bones);
+			this->attachments.swap(parsed.attachments);
+			this->hitboxsets.swap(parsed.hitboxsets);
 
 			this->lods.swap(parsed.lods);
 			this->materials.swap(parsed.materials);
@@ -304,7 +503,14 @@ public:
 			this->bodyParts.swap(parsed.bodyParts);
 
 			this->sequences = parsed.sequences;
+			this->poseparams = parsed.poseparams;
+			this->ikchains = parsed.ikchains;
+			this->iklocks = parsed.iklocks;
+
 			parsed.sequences = nullptr;
+			parsed.poseparams = nullptr;
+			parsed.ikchains = nullptr;
+			parsed.iklocks = nullptr;
 
 			this->studiohdr = parsed.studiohdr;
 		}
@@ -316,6 +522,7 @@ public:
 
 	std::vector<ModelBone_t> bones;
 	std::vector<ModelAttachment_t> attachments;
+	std::vector<ModelHitboxSet_t> hitboxsets;
 
 	std::vector<ModelLODData_t> lods;
 	std::vector<ModelMaterialData_t> materials;
@@ -327,13 +534,19 @@ public:
 	// [rika]: unused, not quite sure why this was added
 	//std::vector<ModelAnimSequence_t> animSequences;
 	seqdesc_t* sequences;
+	ModelPoseParam_t* poseparams;
+	ModelIKChain_t* ikchains;
+	ModelIKLock_t* iklocks;
 
 	studiohdr_generic_t studiohdr;
 
 	inline const studiohdr_generic_t* const pStudioHdr() const { return &studiohdr; }
 	inline const ModelBone_t* const pBone(const int i) const { return &bones.at(i); }
-	inline const ModelAttachment_t* const pAttachment(const int i) const { return &attachments.at(i); }
+	inline const ModelAttachment_t* const pAttachment(const size_t i) const { return &attachments.at(i); }
+	inline const ModelHitboxSet_t* const pHitboxSet(const size_t i) const { return &hitboxsets.at(i); }
 	inline const ModelMaterialData_t* const pMaterial(const int i) const { return &materials.at(i); }
+	inline const ModelBodyPart_t* const pBodypart(const size_t i) const { return &bodyParts.at(i); }
+	inline const ModelLODData_t* const pLOD(const size_t i) const { return &lods.at(i); }
 
 	inline const int BoneCount() const { return studiohdr.boneCount; }
 
@@ -359,6 +572,9 @@ void ParseModelBoneData_v19(ModelParsedData_t* const parsedData);
 
 void ParseModelAttachmentData_v8(ModelParsedData_t* const parsedData);
 void ParseModelAttachmentData_v16(ModelParsedData_t* const parsedData);
+
+void ParseModelHitboxData_v8(ModelParsedData_t* const parsedData);
+void ParseModelHitboxData_v16(ModelParsedData_t* const parsedData);
 
 void ParseModelDrawData(ModelParsedData_t* const parsedData, CDXDrawData* const drawData, const uint64_t lod);
 
@@ -386,6 +602,8 @@ template<typename mstudioseqdesc_t> void ParseModelSequenceData_Stall(ModelParse
 	}
 }
 
+void ParseModelAnimTypes_V8(ModelParsedData_t* const parsedData);
+void ParseModelAnimTypes_V16(ModelParsedData_t* const parsedData);
 
 // 
 // COMPDATA
@@ -536,6 +754,14 @@ static const char* s_ModelExportSettingNames[] =
 	"STL (Respawn Physics)"
 };
 
+static const char* s_ModelExportExtensions[] =
+{
+	".cast",
+	".rmax",
+	".rmdl",
+	".smd",
+};
+
 enum eAnimRigExportSetting : int
 {
 	ANIMRIG_CAST,
@@ -575,10 +801,32 @@ static const char* s_AnimSeqExportSettingNames[] =
 bool ExportModelRMAX(const ModelParsedData_t* const parsedData, std::filesystem::path& exportPath);
 bool ExportModelCast(const ModelParsedData_t* const parsedData, std::filesystem::path& exportPath, const uint64_t guid);
 bool ExportModelSMD(const ModelParsedData_t* const parsedData, std::filesystem::path& exportPath);
+bool ExportModelQC(const ModelParsedData_t* const parsedData, std::filesystem::path& exportPath, const int setting, const int version);
 
 bool ExportSeqDesc(const int setting, const seqdesc_t* const seqdesc, std::filesystem::path& exportPath, const char* const skelName, const std::vector<ModelBone_t>* const bones, const uint64_t guid);
 
 void UpdateModelBoneMatrix(CDXDrawData* const drawData, const ModelParsedData_t* const parsedData);
 void InitModelBoneMatrix(CDXDrawData* const drawData, const ModelParsedData_t* const parsedData);
 
+struct ModelPreviewInfo_t
+{
+	ModelPreviewInfo_t() : lastSelectedBodypartIndex(0u), selectedBodypartIndex(0u), lastSelectedSkinIndex(0u), selectedSkinIndex(0u), selectedLODLevel(0u), minLODIndex(0u), maxLODIndex(0u)
+	{
+
+	}
+
+	std::vector<size_t> bodygroupModelSelected;
+	size_t lastSelectedBodypartIndex = 0;
+	size_t selectedBodypartIndex = 0;
+
+	size_t lastSelectedSkinIndex = 0;
+	size_t selectedSkinIndex = 0;
+
+	// for controlling and handling lod changes
+	uint8_t selectedLODLevel = 0u;
+	uint8_t minLODIndex = 0u;
+	uint8_t maxLODIndex = 0u;
+};
+
+void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const parsedData, char* const assetName, const uint64_t assetGUID, const bool firstFrameForAsset);
 void PreviewSeqDesc(const seqdesc_t* const seqdesc);

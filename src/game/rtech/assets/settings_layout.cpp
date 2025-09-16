@@ -34,12 +34,12 @@ bool SettingsFieldFinder_FindFieldByAbsoluteOffset(const SettingsLayoutAsset* co
 	for (const SettingsField& field : layout->layoutFields)
 	{
 		const uint32_t totalValueBufSizeAligned = IALIGN(layout->totalLayoutSize, layout->alignment);
-		const uint32_t originalBase = result.currentBase;
+		const uint32_t originalBaseCurrentDepth = result.currentBase;
 
-		if (targetOffset > result.currentBase + (layout->arrayValueCount * totalValueBufSizeAligned))
+		if (targetOffset >= originalBaseCurrentDepth + (layout->arrayValueCount * totalValueBufSizeAligned))
 			return false; // Beyond this layout.
 
-		if (targetOffset < field.valueOffset)
+		if (targetOffset < (originalBaseCurrentDepth + field.valueOffset))
 			return false; // Invalid offset (i.e. we have 2 ints at 4 and 8, but target was 5).
 
 		// [amos]: handle everything in our current layout, including nested arrays.
@@ -48,7 +48,7 @@ bool SettingsFieldFinder_FindFieldByAbsoluteOffset(const SettingsLayoutAsset* co
 		// supports nesting static arrays and dynamic arrays into static arrays.
 		for (int currArrayIdx = 0; currArrayIdx < layout->arrayValueCount; currArrayIdx++)
 		{
-			const uint32_t elementBase = result.currentBase + (currArrayIdx * totalValueBufSizeAligned);
+			const uint32_t elementBase = originalBaseCurrentDepth + (currArrayIdx * totalValueBufSizeAligned);
 			const uint32_t absoluteFieldOffset = elementBase + field.valueOffset;
 
 			const bool isStaticArray = field.dataType == eSettingsFieldType::ST_ARRAY;
@@ -84,7 +84,7 @@ bool SettingsFieldFinder_FindFieldByAbsoluteOffset(const SettingsLayoutAsset* co
 					return true;
 				}
 
-				result.currentBase = originalBase;
+				result.currentBase = originalBaseCurrentDepth;
 			}
 		}
 	}

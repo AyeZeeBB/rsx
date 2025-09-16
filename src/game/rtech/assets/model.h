@@ -12,22 +12,21 @@ class CDXDrawData;
 struct ModelAssetHeader_v8_t
 {
 	void* data; // ptr to studiohdr & rmdl buffer
-
 	char* name;
 
 	char unk_10[8];
 
 	void* physics;
-
-	char* permVertData; // permanent vertex components
+	char* vertexComponentData; // non-streamable vertex components
 
 	AssetGuid_t* animRigs;
-	int numAnimRigs;
+	uint32_t numAnimRigs;
 
-	int componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
-	int streamingDataSize; // size of VG data post-baking. probably not real but we don't need to change packing
+	uint32_t componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
 
-	int numAnimSeqs;
+	uint32_t unk_38;
+
+	uint32_t numAnimSeqs;
 	AssetGuid_t* animSeqs;
 
 	char unk_48[8];
@@ -36,27 +35,26 @@ struct ModelAssetHeader_v8_t
 struct ModelAssetHeader_v9_t
 {
 	void* data; // ptr to studiohdr & rmdl buffer
-	void* reserved_1;
-
+	void* info; // set on load
 	char* name;
+
 	char gap_18[8];
 
 	void* physics;
-	void* unk_28;
-
-	char* permVertData; // used for static prop cache
+	char* vertexComponentData; // non-streamable vertex components
+	char* staticStreamingData; // baked (streamable) vertex data used for static prop cache
 
 	AssetGuid_t* animRigs;
-	int numAnimRigs;
+	uint32_t numAnimRigs;
 
-	int componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
-	int streamingDataSize; // size of VG data post-baking
+	uint32_t componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
+	uint32_t streamingDataSize; // size of VG data post-baking
 
 	uint64_t unk_4C;
 	uint64_t unk_54;
 	uint32_t unk_5C;
 
-	int numAnimSeqs;
+	uint32_t numAnimSeqs;
 	AssetGuid_t* animSeqs;
 
 	char gap_6C[8];
@@ -66,26 +64,25 @@ static_assert(sizeof(ModelAssetHeader_v9_t) == 120);
 struct ModelAssetHeader_v12_1_t
 {
 	void* data; // ptr to studiohdr & rmdl buffer
-	void* reserved_1;
-
+	void* info; // set on load
 	char* name;
+
 	char gap_18[8];
 
 	void* physics;
-	void* unk_28;
-
-	char* permVertData; // used for static prop cache
+	char* vertexComponentData; // non-streamable vertex components
+	char* staticStreamingData; // baked (streamable) vertex data used for static prop cache
 
 	AssetGuid_t* animRigs;
-	int numAnimRigs;
+	uint32_t numAnimRigs;
 
-	int componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
-	int streamingDataSize; // size of VG data post-baking
+	uint32_t componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
+	uint32_t streamingDataSize; // size of VG data post-baking
 
 	char gap_4C[8];
 
 	// number of anim sequences directly associated with this model
-	int numAnimSeqs;
+	uint32_t numAnimSeqs;
 	AssetGuid_t* animSeqs;
 
 	char gap_60[8];
@@ -95,21 +92,20 @@ static_assert(sizeof(ModelAssetHeader_v12_1_t) == 104);
 struct ModelAssetHeader_v13_t
 {
 	void* data; // ptr to studiohdr & rmdl buffer
-	void* reserved_1;
-
+	void* info; // set on load
 	char* name;
+
 	char gap_18[8];
 
 	void* physics;
-	void* unk_28;
-
-	char* permVertData; // used for static prop cache
+	char* vertexComponentData; // non-streamable vertex components
+	char* staticStreamingData; // baked (streamable) vertex data used for static prop cache
 
 	AssetGuid_t* animRigs;
-	int numAnimRigs;
+	uint32_t numAnimRigs;
 
-	int componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
-	int streamingDataSize; // size of VG data post-baking
+	uint32_t componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
+	uint32_t streamingDataSize; // size of VG data post-baking
 
 	Vector bbox_min;
 	Vector bbox_max;
@@ -117,7 +113,7 @@ struct ModelAssetHeader_v13_t
 	char gap_64[8];
 
 	// number of anim sequences directly associated with this model
-	int numAnimSeqs;
+	uint32_t numAnimSeqs;
 	AssetGuid_t* animSeqs;
 
 	char gap_78[8];
@@ -128,21 +124,22 @@ struct ModelAssetHeader_v16_t
 {
 	void* data; // ptr to studiohdr & rmdl buffer
 	char* name;
+
 	char gap_10[8];
 
-	char* permVertData; // used for static prop cache
+	char* staticStreamingData; // baked (streamable) vertex data used for static prop cache
 
 	AssetGuid_t* animRigs;
-	int numAnimRigs;
+	uint32_t numAnimRigs;
 
-	int streamingDataSize; // size of VG data post-baking
+	uint32_t streamingDataSize; // size of VG data post-baking
 
 	Vector bbox_min;
 	Vector bbox_max;
 
-	short gap_48;
+	uint16_t gap_48;
 
-	short numAnimSeqs;
+	uint16_t numAnimSeqs;
 
 	char gap_4C[4];
 
@@ -315,15 +312,15 @@ class ModelAsset
 {
 public:
 	ModelAsset() = default;
-	ModelAsset(ModelAssetHeader_v8_t* hdr, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertDataPermanent(hdr->permVertData), vertDataStreamed(streamedData), physics(hdr->physics),
+	ModelAsset(ModelAssetHeader_v8_t* hdr, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertexComponentData(hdr->vertexComponentData), staticStreamingData(nullptr), vertexStreamingData(streamedData), physics(hdr->physics),
+		componentDataSize(hdr->componentDataSize), streamingDataSize(0u), animRigs(hdr->animRigs), numAnimRigs(hdr->numAnimRigs),
+		numAnimSeqs(hdr->numAnimSeqs), animSeqs(hdr->animSeqs), version(ver), parsedData(reinterpret_cast<r5::studiohdr_v8_t*>(data)) {};
+
+	ModelAsset(ModelAssetHeader_v9_t* hdr, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertexComponentData(hdr->vertexComponentData), staticStreamingData(hdr->staticStreamingData), vertexStreamingData(streamedData), physics(hdr->physics),
 		componentDataSize(hdr->componentDataSize), streamingDataSize(hdr->streamingDataSize), animRigs(hdr->animRigs), numAnimRigs(hdr->numAnimRigs),
 		numAnimSeqs(hdr->numAnimSeqs), animSeqs(hdr->animSeqs), version(ver), parsedData(reinterpret_cast<r5::studiohdr_v8_t*>(data)) {};
 
-	ModelAsset(ModelAssetHeader_v9_t* hdr, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertDataPermanent(hdr->permVertData), vertDataStreamed(streamedData), physics(hdr->physics),
-		componentDataSize(hdr->componentDataSize), streamingDataSize(hdr->streamingDataSize), animRigs(hdr->animRigs), numAnimRigs(hdr->numAnimRigs),
-		numAnimSeqs(hdr->numAnimSeqs), animSeqs(hdr->animSeqs), version(ver), parsedData(reinterpret_cast<r5::studiohdr_v8_t*>(data)) {};
-
-	ModelAsset(ModelAssetHeader_v12_1_t* hdr, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertDataPermanent(hdr->permVertData), vertDataStreamed(streamedData), physics(hdr->physics),
+	ModelAsset(ModelAssetHeader_v12_1_t* hdr, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertexComponentData(hdr->vertexComponentData), staticStreamingData(hdr->staticStreamingData), vertexStreamingData(streamedData), physics(hdr->physics),
 		componentDataSize(hdr->componentDataSize), streamingDataSize(hdr->streamingDataSize), animRigs(hdr->animRigs), numAnimRigs(hdr->numAnimRigs),
 		numAnimSeqs(hdr->numAnimSeqs), animSeqs(hdr->animSeqs), version(ver)
 	{
@@ -349,7 +346,7 @@ public:
 		}
 	};
 
-	ModelAsset(ModelAssetHeader_v13_t* hdr, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertDataPermanent(hdr->permVertData), vertDataStreamed(streamedData), physics(hdr->physics),
+	ModelAsset(ModelAssetHeader_v13_t* hdr, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertexComponentData(hdr->vertexComponentData), staticStreamingData(hdr->staticStreamingData), vertexStreamingData(streamedData), physics(hdr->physics),
 		componentDataSize(hdr->componentDataSize), streamingDataSize(hdr->streamingDataSize), animRigs(hdr->animRigs), numAnimRigs(hdr->numAnimRigs),
 		numAnimSeqs(hdr->numAnimSeqs), animSeqs(hdr->animSeqs), version(ver)
 	{
@@ -371,8 +368,8 @@ public:
 		}
 	};
 
-	ModelAsset(ModelAssetHeader_v16_t* hdr, ModelAssetCPU_v16_t* cpu, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertDataPermanent(hdr->permVertData), vertDataStreamed(streamedData), physics(cpu->physics),
-		componentDataSize(-1), streamingDataSize(hdr->streamingDataSize), animRigs(hdr->animRigs), numAnimRigs(hdr->numAnimRigs),
+	ModelAsset(ModelAssetHeader_v16_t* hdr, ModelAssetCPU_v16_t* cpu, AssetPtr_t streamedData, eMDLVersion ver) : name(hdr->name), data(hdr->data), vertexComponentData(nullptr), staticStreamingData(hdr->staticStreamingData), vertexStreamingData(streamedData), physics(cpu->physics),
+		componentDataSize(0u), streamingDataSize(hdr->streamingDataSize), animRigs(hdr->animRigs), numAnimRigs(hdr->numAnimRigs),
 		numAnimSeqs(hdr->numAnimSeqs), animSeqs(hdr->animSeqs), version(ver)
 	{
 		switch (ver)
@@ -394,28 +391,25 @@ public:
 
 	~ModelAsset()
 	{
-		delete drawData;
-	}
 
-	//void InitBoneMatrix();
-	//void UpdateBoneMatrix();
+	}
 
 	char* name;
 	void* data; // ptr to studiohdr & rmdl buffer
-	AssetPtr_t vertDataStreamed;  // vertex data (valve or hwdata)
-	char* vertDataPermanent; // vertex data (valve or hwdata)  
-	void* physics;
 
-	int componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
-	int streamingDataSize; // size of VG data post-baking, hw size is probably a better name as it also has static data
+	void* physics;
+	char* vertexComponentData; // non-streamable vertex components
+	char* staticStreamingData; // baked (streamable) vertex data used for static prop cache
+	AssetPtr_t vertexStreamingData;  // baked (streamable) vertex data (stored in starpak)
+
+	uint32_t componentDataSize; // size of individual mdl components pre-baking (vtx, vvd, etc.)
+	uint32_t streamingDataSize; // size of VG data post-baking, hw size is probably a better name as it also has static data
 
 	AssetGuid_t* animRigs;
 	AssetGuid_t* animSeqs;
 
-	int numAnimRigs;
-	int numAnimSeqs;
-
-	CDXDrawData* drawData;
+	uint32_t numAnimRigs;
+	uint32_t numAnimSeqs;
 
 	ModelParsedData_t parsedData;
 
@@ -427,8 +421,8 @@ public:
 	inline const std::vector<ModelBone_t>* const GetRig() const { return &parsedData.bones; } // slerp them bones
 
 	// get loose files from vertDataPermanent
-	const OptimizedModel::FileHeader_t* const GetVTX() const { return StudioHdr().vtxSize > 0 ? reinterpret_cast<const OptimizedModel::FileHeader_t* const>(vertDataPermanent + StudioHdr().vtxOffset) : nullptr; }
-	const vvd::vertexFileHeader_t* const GetVVD() const { return StudioHdr().vvdSize > 0 ? reinterpret_cast<const vvd::vertexFileHeader_t* const>(vertDataPermanent + StudioHdr().vvdOffset) : nullptr; }
-	const vvc::vertexColorFileHeader_t* const GetVVC() const { return StudioHdr().vvcSize > 0 ? reinterpret_cast<const vvc::vertexColorFileHeader_t* const>(vertDataPermanent + StudioHdr().vvcOffset) : nullptr; }
-	const vvw::vertexBoneWeightsExtraFileHeader_t* const GetVVW() const { return StudioHdr().vvwSize > 0 ? reinterpret_cast<const vvw::vertexBoneWeightsExtraFileHeader_t* const>(vertDataPermanent + StudioHdr().vvwOffset) : nullptr; }
+	const OptimizedModel::FileHeader_t* const GetVTX() const { return StudioHdr().vtxSize > 0 ? reinterpret_cast<const OptimizedModel::FileHeader_t* const>(vertexComponentData + StudioHdr().vtxOffset) : nullptr; }
+	const vvd::vertexFileHeader_t* const GetVVD() const { return StudioHdr().vvdSize > 0 ? reinterpret_cast<const vvd::vertexFileHeader_t* const>(vertexComponentData + StudioHdr().vvdOffset) : nullptr; }
+	const vvc::vertexColorFileHeader_t* const GetVVC() const { return StudioHdr().vvcSize > 0 ? reinterpret_cast<const vvc::vertexColorFileHeader_t* const>(vertexComponentData + StudioHdr().vvcOffset) : nullptr; }
+	const vvw::vertexBoneWeightsExtraFileHeader_t* const GetVVW() const { return StudioHdr().vvwSize > 0 ? reinterpret_cast<const vvw::vertexBoneWeightsExtraFileHeader_t* const>(vertexComponentData + StudioHdr().vvwOffset) : nullptr; }
 };

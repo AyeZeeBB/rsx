@@ -169,3 +169,20 @@ namespace vg
         return vertexCacheSize;
     }
 }
+
+// gets a source bone transform for a bone if it exists
+const mstudiosrcbonetransform_t* const GetSrcBoneTransform(const char* const bone, const mstudiosrcbonetransform_t* const pSrcBoneTransforms, const int numSrcBoneTransforms)
+{
+    const mstudiosrcbonetransform_t* pSrcBoneTransform = nullptr;
+
+    // [rika]: parse through srcbonetransforms until we find a matching one (by name yikes) or return nullptr if there's no transform for this bone
+    for (int i = 0; i < numSrcBoneTransforms; i++)
+    {
+        pSrcBoneTransform = pSrcBoneTransforms + i;
+
+        if (!strncmp(pSrcBoneTransform->pszName(), bone, MAX_PATH))
+            return pSrcBoneTransform;
+    }
+
+    return nullptr;
+}

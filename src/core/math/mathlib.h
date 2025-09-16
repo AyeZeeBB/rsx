@@ -2,8 +2,10 @@
 #include <DirectXMath.h>
 using namespace DirectX;
 
-#define DEG2RAD(x) (static_cast<float>(x) * (XM_PI / 180.f))
-#define RAD2DEG(x) (static_cast<float>(x) * (180.f / XM_PI))
+constexpr float s_DEG2RAD_CONST = (XM_PI / 180.f);
+constexpr float s_RAD2DEG_CONST = (180.f / XM_PI);
+#define DEG2RAD(x) (static_cast<float>(x) * s_DEG2RAD_CONST)
+#define RAD2DEG(x) (static_cast<float>(x) * s_RAD2DEG_CONST)
 
 #if MATH_SIMD
 
