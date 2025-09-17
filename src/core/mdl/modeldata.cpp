@@ -529,7 +529,7 @@ void ParseModelSequenceData_NoStall(ModelParsedData_t* const parsedData, char* c
 	{
 		parsedData->sequences[i] = seqdesc_t(reinterpret_cast<r5::mstudioseqdesc_v8_t* const>(baseptr + pStudioHdr->localSequenceOffset) + i);
 
-		ParseSeqDesc_R5(&parsedData->sequences[i], &parsedData->bones, false);
+		ParseSeqDesc_R5(&parsedData->sequences[i], &parsedData->bones, AnimdataFuncType_t::ANIM_FUNC_NOSTALL);
 	}
 }
 
@@ -695,7 +695,7 @@ void ParseAnimDesc_R2(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 		const float s = (fFrame - static_cast<float>(iFrame));
 
 		int iLocalFrame = iFrame;
-		const r2::mstudio_rle_anim_t* const panimstart = reinterpret_cast<const r2::mstudio_rle_anim_t*>(animdesc->pAnimdataNoStall(&iLocalFrame));
+		const r2::mstudio_rle_anim_t* const panimstart = reinterpret_cast<const r2::mstudio_rle_anim_t*>(animdesc->pAnimdataNoStall(&iLocalFrame, nullptr));
 
 		for (int bone = 0; bone < boneCount; bone++)
 		{
@@ -844,6 +844,8 @@ void ParseAnimDesc_R5(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 
 				if (boneFlags & (r5::RleBoneFlags_t::STUDIO_ANIM_DATA)) // check if this bone has data
 				{
+					UNUSED(panimtrack);
+					UNUSED(fLocalFrame);
 					if (boneFlags & r5::RleBoneFlags_t::STUDIO_ANIM_ROT)
 						r5::CalcBoneQuaternion_DP(sectionlength, &panimtrack, fLocalFrame, q);
 
@@ -888,8 +890,10 @@ void ParseAnimDesc_R5(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 
 			int iLocalFrame = iFrame;
 
-			const uint8_t* const boneFlagArray = reinterpret_cast<const uint8_t* const>((animdesc->*pAnimdata)(&iLocalFrame));
+			int sectionlength = 0;
+			const uint8_t* const boneFlagArray = reinterpret_cast<const uint8_t* const>((animdesc->*pAnimdata)(&iLocalFrame, &sectionlength));
 			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount)]);
+			UNUSED(sectionlength);
 
 			for (int bone = 0; bone < boneCount; bone++)
 			{
@@ -947,18 +951,22 @@ void ParseAnimDesc_R5(seqdesc_t* const seqdesc, animdesc_t* const animdesc, cons
 	g_BufferManager.RelieveBuffer(buffer);		
 }
 
-void ParseSeqDesc_R5(seqdesc_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const bool useStall)
+void ParseSeqDesc_R5(seqdesc_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const AnimdataFuncType_t funcType)
 {
 	// check flags
 	assertm(static_cast<uint8_t>(CAnimDataBone::ANIMDATA_POS) == static_cast<uint8_t>(r5::RleBoneFlags_t::STUDIO_ANIM_POS), "flag mismatch");
 	assertm(static_cast<uint8_t>(CAnimDataBone::ANIMDATA_ROT) == static_cast<uint8_t>(r5::RleBoneFlags_t::STUDIO_ANIM_ROT), "flag mismatch");
 	assertm(static_cast<uint8_t>(CAnimDataBone::ANIMDATA_SCL) == static_cast<uint8_t>(r5::RleBoneFlags_t::STUDIO_ANIM_SCALE), "flag mismatch");
 
-	AnimdataFunc_t pAnimdata = useStall ? &animdesc_t::pAnimdataStall : &animdesc_t::pAnimdataNoStall;
+	AnimdataFunc_t pAnimdata = s_AnimdataFuncs[funcType];
 
 	for (int i = 0; i < seqdesc->AnimCount(); i++)
 	{
 		animdesc_t* const animdesc = &seqdesc->anims.at(i);
+
+		// [rika]: data for this anim is not loaded, skip it
+		if (!animdesc->baseptr_anim)
+			continue;
 
 		ParseAnimDesc_R5(seqdesc, animdesc, bones, pAnimdata);
 	}

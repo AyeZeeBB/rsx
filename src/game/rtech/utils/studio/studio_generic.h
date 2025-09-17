@@ -56,13 +56,16 @@ struct animdesc_t
 	animdesc_t(const r5::mstudioanimdesc_v8_t* const animdesc);
 	animdesc_t(const r5::mstudioanimdesc_v12_1_t* const animdesc, const char* const ext);
 	animdesc_t(const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext);
+	animdesc_t(const r5::mstudioanimdesc_v19_1_t* const animdesc, const char* const ext);
 
 	~animdesc_t()
 	{
 		if (nullptr != movement) delete movement;
 	}
 
-	const void* baseptr; // for getting to the animations
+	const void* baseptr_desc; // for getting to the animations
+	const void* baseptr_anim; // for getting to the animations
+
 	const char* name;
 
 	float fps;
@@ -79,8 +82,8 @@ struct animdesc_t
 	int animindex;
 
 	// data array, starting with per bone flags
-	const char* const pAnimdataNoStall(int* const piFrame) const;
-	const char* const pAnimdataStall(int* const piFrame) const;
+	const char* const pAnimdataNoStall(int* const piFrame, int* const sectionFrameCount) const;
+	const char* const pAnimdataStall(int* const piFrame, int* const sectionFrameCount) const;
 	const char* const pAnimdataStall_DP(int* const piFrame, int* const sectionFrameCount) const;
 
 	int sectionindex; // can be safely removed
@@ -115,6 +118,7 @@ struct animdesc_t
 	}
 
 	const char* sectionDataExtra;
+	uint64_t animSeqDataGUID;
 
 	size_t parsedBufferIndex;
 
@@ -125,7 +129,23 @@ struct animdesc_t
 		return cycle;
 	}
 };
-typedef const char* const (animdesc_t::* AnimdataFunc_t)(int* const) const;
+typedef const char* const (animdesc_t::* AnimdataFunc_t)(int* const, int* const) const;
+
+enum AnimdataFuncType_t : uint8_t
+{
+	ANIM_FUNC_NOSTALL,
+	ANIM_FUNC_STALL,
+	ANIM_FUNC_STALL_RETAIL,
+
+	ANIM_FUNC_COUNT,
+};
+
+static AnimdataFunc_t s_AnimdataFuncs[AnimdataFuncType_t::ANIM_FUNC_COUNT] =
+{
+	&animdesc_t::pAnimdataNoStall,
+	&animdesc_t::pAnimdataStall,
+	&animdesc_t::pAnimdataStall_DP,
+};
 
 struct seqdesc_t
 {
@@ -133,9 +153,10 @@ struct seqdesc_t
 	seqdesc_t() = default;
 	seqdesc_t(const r2::mstudioseqdesc_t* const seqdesc);
 	seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc);
-	seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc, const char* const ext);
-	seqdesc_t(const r5::mstudioseqdesc_v16_t* const seqdesc, const char* const ext);
-	seqdesc_t(const r5::mstudioseqdesc_v18_t* const seqdesc, const char* const ext);
+	seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc, const r5::mstudioanimdesc_v12_1_t* const animdesc, const char* const ext);
+	seqdesc_t(const r5::mstudioseqdesc_v16_t* const seqdesc, const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext);
+	seqdesc_t(const r5::mstudioseqdesc_v18_t* const seqdesc, const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext);
+	seqdesc_t(const r5::mstudioseqdesc_v18_t* const seqdesc, const r5::mstudioanimdesc_v19_1_t* const animdesc, const char* const ext);
 
 	seqdesc_t& operator=(seqdesc_t&& seqdesc) noexcept
 	{

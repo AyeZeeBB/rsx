@@ -10,6 +10,7 @@ enum class AssetType_t
 	MDL_ = MAKEFOURCC('m', 'd', 'l', '_'),
 	ARIG = MAKEFOURCC('a', 'r', 'i', 'g'),
 	ASEQ = MAKEFOURCC('a', 's', 'e', 'q'),
+	ASQD = MAKEFOURCC('a', 's', 'q', 'd'),
 	ANIR = MAKEFOURCC('a', 'n', 'i', 'r'),
 	// non pak
 	MDL  = MAKEFOURCC('m', 'd', 'l', '\0'),	

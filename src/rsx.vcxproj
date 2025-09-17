@@ -56,6 +56,7 @@
     <ClInclude Include="game\model\sourcemodel.h" />
     <ClInclude Include="game\rtech\assets\animrig.h" />
     <ClInclude Include="game\rtech\assets\animseq.h" />
+    <ClInclude Include="game\rtech\assets\animseq_data.h" />
     <ClInclude Include="game\rtech\assets\anim_recording.h" />
     <ClInclude Include="game\rtech\assets\datatable.h" />
     <ClInclude Include="game\rtech\assets\effect.h" />
@@ -155,6 +156,7 @@
     <ClCompile Include="game\model\sourcemodel.cpp" />
     <ClCompile Include="game\rtech\assets\animrig.cpp" />
     <ClCompile Include="game\rtech\assets\animseq.cpp" />
+    <ClCompile Include="game\rtech\assets\animseq_data.cpp" />
     <ClCompile Include="game\rtech\assets\anim_recording.cpp" />
     <ClCompile Include="game\rtech\assets\datatable.cpp" />
     <ClCompile Include="game\rtech\assets\effect.cpp" />

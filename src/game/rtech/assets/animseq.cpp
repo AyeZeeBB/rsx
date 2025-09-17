@@ -1,5 +1,6 @@
 #include <pch.h>
 #include <game/rtech/assets/animseq.h>
+#include <game/rtech/assets/animseq_data.h>
 #include <game/rtech/assets/rson.h>
 
 #include <core/mdl/rmax.h>
@@ -21,7 +22,7 @@ void LoadAnimSeqAsset(CAssetContainer* const container, CAsset* const asset)
 	AnimSeqAsset* seqAsset = nullptr;
 	const AssetPtr_t streamEntry = pakAsset->getStarPakStreamEntry(false);
 
-	const eSeqVersion ver = GetAnimSeqVersionFromAsset(pakAsset);
+	const eSeqVersion ver = GetAnimSeqVersionFromAsset(pakAsset, static_cast<CPakFile* const>(container));
 	switch (ver)
 	{
 	case eSeqVersion::VERSION_7:
@@ -43,6 +44,7 @@ void LoadAnimSeqAsset(CAssetContainer* const container, CAsset* const asset)
 	case eSeqVersion::VERSION_10:
 	case eSeqVersion::VERSION_11:
 	case eSeqVersion::VERSION_12:
+	case eSeqVersion::VERSION_12_1:
 	{
 		AnimSeqAssetHeader_v8_t* hdr = reinterpret_cast<AnimSeqAssetHeader_v8_t*>(pakAsset->header());
 		seqAsset = new AnimSeqAsset(hdr, streamEntry, ver);
@@ -84,22 +86,41 @@ void PostLoadAnimSeqAsset(CAssetContainer* const container, CAsset* const asset)
 	}
 	assertm(!bones->empty(), "we should have bones at this point.");
 
-	// ramen here
-
-	// [rika]: parse the animseq's raw data size in post load if we couldn't determine a bone count before.
-	if (seqAsset->dataSize == 0 && asset->GetAssetVersion().majorVer >= 12)
-		seqAsset->UpdateDataSizeNew(static_cast<int>(bones->size()));
-
 	switch (seqAsset->version)
 	{
 	case eSeqVersion::VERSION_7:
+	{
+		ParseSeqDesc_R5(&seqAsset->seqdesc, bones, AnimdataFuncType_t::ANIM_FUNC_NOSTALL);
+
+		break;
+	}
 	case eSeqVersion::VERSION_7_1:
 	case eSeqVersion::VERSION_8:
 	case eSeqVersion::VERSION_10:
 	case eSeqVersion::VERSION_11:
+	{
+		ParseSeqDesc_R5(&seqAsset->seqdesc, bones, AnimdataFuncType_t::ANIM_FUNC_STALL);
+
+		break;
+	}
 	case eSeqVersion::VERSION_12:
 	{
-		ParseSeqDesc_R5(&seqAsset->seqdesc, bones, seqAsset->UseStall());
+		// [rika]: parse the animseq's raw data size in post load if we couldn't determine a bone count before.
+		if (seqAsset->dataSize == 0)
+			seqAsset->UpdateDataSize_V12(static_cast<int>(bones->size()));
+
+		ParseSeqDesc_R5(&seqAsset->seqdesc, bones, AnimdataFuncType_t::ANIM_FUNC_STALL);
+
+		break;
+	}
+	case eSeqVersion::VERSION_12_1:
+	{// [rika]: parse the animseq's raw data size in post load if we couldn't determine a bone count before.
+		if (seqAsset->dataSize == 0)
+			seqAsset->UpdateDataSize_V12_1(static_cast<int>(bones->size()));
+
+		// [rika]: I love changing assets, but never ever would change a version!
+		ParseAnimSeqDataForSeqdesc(&seqAsset->seqdesc);
+		ParseSeqDesc_R5(&seqAsset->seqdesc, bones, AnimdataFuncType_t::ANIM_FUNC_STALL_RETAIL);
 
 		break;
 	}

@@ -718,6 +718,7 @@ namespace r5
 		int lastFrame;
 	};
 
+	struct mstudioanimdesc_v19_1_t;
 	struct mstudioseqdesc_v18_t
 	{
 		uint16_t szlabelindex;
@@ -743,7 +744,8 @@ namespace r5
 		uint16_t animindexindex;
 		const int AnimIndex(const uint16_t i) const { return FIX_OFFSET(reinterpret_cast<const uint16_t* const>((const char* const)this + FIX_OFFSET(animindexindex))[i]); }
 		const int AnimCount() const { return  groupsize[0] * groupsize[1]; }
-		mstudioanimdesc_v16_t* pAnimDesc(const uint16_t i) const { return reinterpret_cast<mstudioanimdesc_v16_t*>((char*)this + AnimIndex(i)); }
+		const mstudioanimdesc_v16_t* const pAnimDesc(const uint16_t i) const { return reinterpret_cast<const mstudioanimdesc_v16_t* const>((char*)this + AnimIndex(i)); }
+		const mstudioanimdesc_v19_1_t* const pAnimDesc_V19_1(const uint16_t i) const;
 
 		//short movementindex; // [blend] float array for blended movement
 		short paramindex[2]; // X, Y, Z, XR, YR, ZR
@@ -974,6 +976,44 @@ namespace r5
 		uint16_t numInterpFrames : 7; // frame gap between this and the next valid data
 
 		static void Unpack(Vector& pos, const AnimPos64 packedPos, const AxisFixup_t* const axisFixup);
+	};
+
+
+	//
+	// VERSION 19.1
+	//
+
+	struct mstudioanimdesc_v19_1_t
+	{
+		float fps; // frames per second	
+		int flags; // looping/non-looping flags
+
+		int numframes;
+
+		uint16_t sznameindex;
+		inline const char* pszName() const { return ((char*)this + FIX_OFFSET(sznameindex)); }
+
+		uint16_t framemovementindex; // new in v52
+		inline const mstudioframemovement_t* const pFrameMovement() const { return reinterpret_cast<const mstudioframemovement_t* const>((char*)this + FIX_OFFSET(framemovementindex)); }
+
+		uint16_t numikrules;
+
+		uint8_t unk_12[4]; // pad? unused? what the hell man
+
+		uint16_t ikruleindex; // non-zero when IK data is stored in the mdl
+		inline const mstudioikrule_v16_t* const pIKRule(const int i) const { return reinterpret_cast<mstudioikrule_v16_t*>((char*)this + FIX_OFFSET(ikruleindex)) + i; };
+
+		uint64_t animSeqDataGUID; // guid for animseq data
+
+		char* sectionDataExternal; // set on pak asset load
+		uint16_t unk1; // maybe some sort of thread/mutic for the external data? set on pak asset load from unk_10
+
+		uint16_t sectionindex;
+		uint16_t sectionstallframes; // number of stall frames inside the animation, the reset excluding the final frame are stored externally. when external data is not loaded(?)/found(?) it falls back on the last frame of this as a stall
+		uint16_t sectionframes; // number of frames used in each fast lookup section, zero if not used
+		inline const mstudioanimsections_v16_t* pSection(int i) const { return reinterpret_cast<mstudioanimsections_v16_t*>((char*)this + FIX_OFFSET(sectionindex)) + i; }
+		// numsections = ((numframes - sectionstallframes - 1) / sectionframes) + 2;
+		// numsections after stall section, if stall frames > zero add one section
 	};
 
 

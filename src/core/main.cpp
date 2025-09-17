@@ -31,6 +31,7 @@ static void HandleAssetRegistration(const CCommandLine* const cli)
     extern void InitModelAssetType();
     extern void InitAnimRigAssetType();
     extern void InitAnimSeqAssetType();
+    extern void InitAnimSeqDataAssetType();
     extern void InitAnimRecordingAssetType();
 
     extern void InitSourceModelAssetType();
@@ -94,6 +95,7 @@ static void HandleAssetRegistration(const CCommandLine* const cli)
     InitModelAssetType();
     InitAnimRigAssetType();
     InitAnimSeqAssetType();
+    InitAnimSeqDataAssetType();
     InitAnimRecordingAssetType();
 
     InitSourceModelAssetType();

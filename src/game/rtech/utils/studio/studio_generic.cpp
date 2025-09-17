@@ -40,8 +40,9 @@ animmovement_t::animmovement_t(const r5::mstudioframemovement_t* const movement,
 }
 
 // animdesc
-animdesc_t::animdesc_t(const animdesc_t& animdesc) : baseptr(animdesc.baseptr), name(animdesc.name), fps(animdesc.fps), flags(animdesc.flags), numframes(animdesc.numframes), animindex(animdesc.animindex),
-sectionindex(animdesc.sectionindex), sectionframes(animdesc.sectionframes), sectionstallframes(animdesc.sectionstallframes), sectionDataExtra(animdesc.sectionDataExtra), nummovements(animdesc.nummovements), movementindex(animdesc.movementindex), framemovementindex(animdesc.framemovementindex), movement(nullptr), parsedBufferIndex(animdesc.parsedBufferIndex)
+animdesc_t::animdesc_t(const animdesc_t& animdesc) : baseptr_desc(animdesc.baseptr_desc), baseptr_anim(baseptr_desc), name(animdesc.name), fps(animdesc.fps), flags(animdesc.flags), numframes(animdesc.numframes), animindex(animdesc.animindex),
+	sectionindex(animdesc.sectionindex), sectionframes(animdesc.sectionframes), sectionstallframes(animdesc.sectionstallframes), sectionDataExtra(animdesc.sectionDataExtra), animSeqDataGUID(animdesc.animSeqDataGUID),
+	nummovements(animdesc.nummovements), movementindex(animdesc.movementindex), framemovementindex(animdesc.framemovementindex), movement(nullptr), parsedBufferIndex(animdesc.parsedBufferIndex)
 {
 	if (animdesc.sections.size() > 0)
 	{
@@ -53,8 +54,9 @@ sectionindex(animdesc.sectionindex), sectionframes(animdesc.sectionframes), sect
 		movement = new animmovement_t(*animdesc.movement);
 }
 
-animdesc_t::animdesc_t(const r2::mstudioanimdesc_t* const animdesc) : baseptr(reinterpret_cast<const void* const>(animdesc)), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
-sectionindex(animdesc->sectionindex), sectionframes(animdesc->sectionframes), sectionstallframes(0), sectionDataExtra(nullptr), nummovements(animdesc->nummovements), movementindex(animdesc->movementindex), framemovementindex(animdesc->framemovementindex), movement(nullptr), parsedBufferIndex(0ull)
+animdesc_t::animdesc_t(const r2::mstudioanimdesc_t* const animdesc) : baseptr_desc(reinterpret_cast<const void* const>(animdesc)), baseptr_anim(baseptr_desc), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
+	sectionindex(animdesc->sectionindex), sectionframes(animdesc->sectionframes), sectionstallframes(0), sectionDataExtra(nullptr), animSeqDataGUID(0ull),
+	nummovements(animdesc->nummovements), movementindex(animdesc->movementindex), framemovementindex(animdesc->framemovementindex), movement(nullptr), parsedBufferIndex(invalidNoodleIdx)
 {
 	flags |= eStudioAnimFlags::ANIM_VALID;
 
@@ -74,8 +76,9 @@ sectionindex(animdesc->sectionindex), sectionframes(animdesc->sectionframes), se
 	}
 };
 
-animdesc_t::animdesc_t(const r5::mstudioanimdesc_v8_t* const animdesc) : baseptr(reinterpret_cast<const void* const>(animdesc)), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
-sectionindex(animdesc->sectionindex), sectionframes(animdesc->sectionframes), sectionstallframes(0), sectionDataExtra(nullptr), nummovements(animdesc->nummovements), movementindex(animdesc->movementindex), framemovementindex(animdesc->framemovementindex), movement(nullptr), parsedBufferIndex(0ull)
+animdesc_t::animdesc_t(const r5::mstudioanimdesc_v8_t* const animdesc) : baseptr_desc(reinterpret_cast<const void* const>(animdesc)), baseptr_anim(baseptr_desc), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
+	sectionindex(animdesc->sectionindex), sectionframes(animdesc->sectionframes), sectionstallframes(0), sectionDataExtra(nullptr), animSeqDataGUID(0ull),
+	nummovements(animdesc->nummovements), movementindex(animdesc->movementindex), framemovementindex(animdesc->framemovementindex), movement(nullptr), parsedBufferIndex(invalidNoodleIdx)
 {
 	if (sectionframes)
 	{
@@ -93,8 +96,9 @@ sectionindex(animdesc->sectionindex), sectionframes(animdesc->sectionframes), se
 	}
 };
 
-animdesc_t::animdesc_t(const r5::mstudioanimdesc_v12_1_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(animdesc)), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
-sectionindex(animdesc->sectionindex), sectionframes(animdesc->sectionframes), sectionstallframes(animdesc->sectionstallframes), sectionDataExtra(ext), nummovements(animdesc->nummovements), movementindex(animdesc->movementindex), framemovementindex(animdesc->framemovementindex), movement(nullptr), parsedBufferIndex(0ull)
+animdesc_t::animdesc_t(const r5::mstudioanimdesc_v12_1_t* const animdesc, const char* const ext) : baseptr_desc(reinterpret_cast<const void* const>(animdesc)), baseptr_anim(baseptr_desc), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
+	sectionindex(animdesc->sectionindex), sectionframes(animdesc->sectionframes), sectionstallframes(animdesc->sectionstallframes), sectionDataExtra(ext), animSeqDataGUID(0ull),
+	nummovements(animdesc->nummovements), movementindex(animdesc->movementindex), framemovementindex(animdesc->framemovementindex), movement(nullptr), parsedBufferIndex(invalidNoodleIdx)
 {
 	if (sectionframes)
 	{
@@ -112,8 +116,9 @@ sectionindex(animdesc->sectionindex), sectionframes(animdesc->sectionframes), se
 	}
 };
 
-animdesc_t::animdesc_t(const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(animdesc)), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
-sectionindex(static_cast<int>(FIX_OFFSET(animdesc->sectionindex))), sectionframes(static_cast<int>(animdesc->sectionframes)), sectionstallframes(static_cast<int>(animdesc->sectionstallframes)), sectionDataExtra(ext), nummovements(0), movementindex(0), framemovementindex(FIX_OFFSET(animdesc->framemovementindex)), movement(nullptr), parsedBufferIndex(0ull)
+animdesc_t::animdesc_t(const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext) : baseptr_desc(reinterpret_cast<const void* const>(animdesc)), baseptr_anim(baseptr_desc), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
+	sectionindex(static_cast<int>(FIX_OFFSET(animdesc->sectionindex))), sectionframes(static_cast<int>(animdesc->sectionframes)), sectionstallframes(static_cast<int>(animdesc->sectionstallframes)), sectionDataExtra(ext), animSeqDataGUID(0ull),
+	nummovements(0), movementindex(0), framemovementindex(FIX_OFFSET(animdesc->framemovementindex)), movement(nullptr), parsedBufferIndex(invalidNoodleIdx)
 {
 	assertm(!(animdesc->animindex & 0x80000000), "non section anim with external data");
 
@@ -133,8 +138,35 @@ sectionindex(static_cast<int>(FIX_OFFSET(animdesc->sectionindex))), sectionframe
 	}
 };
 
-const char* const animdesc_t::pAnimdataNoStall(int* const piFrame) const
+animdesc_t::animdesc_t(const r5::mstudioanimdesc_v19_1_t* const animdesc, const char* const ext) : baseptr_desc(reinterpret_cast<const void* const>(animdesc)), baseptr_anim(nullptr), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(0),
+	sectionindex(static_cast<int>(FIX_OFFSET(animdesc->sectionindex))), sectionframes(static_cast<int>(animdesc->sectionframes)), sectionstallframes(static_cast<int>(animdesc->sectionstallframes)), sectionDataExtra(ext), animSeqDataGUID(animdesc->animSeqDataGUID),
+	nummovements(0), movementindex(0), framemovementindex(FIX_OFFSET(animdesc->framemovementindex)), movement(nullptr), parsedBufferIndex(invalidNoodleIdx)
 {
+	// [rika]: they "fixed" the issue of RLE animations not being perfectly compatible with the new pAnimdata function by dropping the trailing section
+	if (sectionframes)
+	{
+		const int sectionCount = SectionCount_DP();
+
+		sections.reserve(sectionCount);
+
+		sections.emplace_back(0, false);
+
+		for (int i = 0; i < sectionCount - static_cast<int>(HasStall()); i++)
+		{
+			sections.emplace_back(animdesc->pSection(i)->Index(), animdesc->pSection(i)->isExternal());
+		}
+	}
+
+	if (framemovementindex && (flags & eStudioAnimFlags::ANIM_FRAMEMOVEMENT))
+	{
+		movement = new animmovement_t(animdesc->pFrameMovement(), numframes, true);
+	}
+};
+
+const char* const animdesc_t::pAnimdataNoStall(int* const piFrame, int* const _UNUSED) const
+{
+	UNUSED(_UNUSED);
+
 	int index = animindex;
 	int section = 0;
 
@@ -156,11 +188,13 @@ const char* const animdesc_t::pAnimdataNoStall(int* const piFrame) const
 		assertm(pSection(section)->isExternal == false, "anim can't have stall frames");
 	}
 
-	return ((char*)baseptr + index);
+	return ((char*)baseptr_anim + index);
 }
 
-const char* const animdesc_t::pAnimdataStall(int* const piFrame) const
+const char* const animdesc_t::pAnimdataStall(int* const piFrame, int* const _UNUSED) const
 {
+	UNUSED(_UNUSED);
+
 	int index = animindex;
 	int section = 0;
 
@@ -193,7 +227,7 @@ const char* const animdesc_t::pAnimdataStall(int* const piFrame) const
 		}
 	}
 
-	return ((char*)baseptr + index);
+	return ((char*)baseptr_anim + index);
 }
 
 // [rika]: broken in retail apex, does not load the last section in rle animation. this probably doesn't cause issues as sections always contain the first frame of the next sections
@@ -242,7 +276,7 @@ const char* const animdesc_t::pAnimdataStall_DP(int* const piFrame, int* const p
 	}
 
 	*pSectionLength = sectionlength;
-	return ((char*)baseptr + index);
+	return ((char*)baseptr_anim + index);
 }
 
 // seqdesc
@@ -265,7 +299,7 @@ seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc) : baseptr(rei
 {
 	for (int i = 0; i < seqdesc->AnimCount(); i++)
 	{
-		r5::mstudioanimdesc_v8_t* const pAnimdesc = seqdesc->pAnimDescV8(i);
+		const r5::mstudioanimdesc_v8_t* const pAnimdesc = seqdesc->pAnimDescV8(i);
 
 		// sanity checks, there are sequences that have animations, but no data for the anim descriptions, and I am unsure how the game checks them.
 		// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
@@ -279,11 +313,14 @@ seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc) : baseptr(rei
 	}
 };
 
-seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(seqdesc)), szlabel(seqdesc->pszLabel()), szactivityname(seqdesc->pszActivity()), flags(seqdesc->flags), weightlistindex(seqdesc->weightlistindex), parsedData(seqdesc->AnimCount())
+seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc, const r5::mstudioanimdesc_v12_1_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(seqdesc)), szlabel(seqdesc->pszLabel()), szactivityname(seqdesc->pszActivity()), flags(seqdesc->flags), weightlistindex(seqdesc->weightlistindex), parsedData(seqdesc->AnimCount())
 {
+	// [rika]: version control
+	UNUSED(animdesc);
+
 	for (int i = 0; i < seqdesc->AnimCount(); i++)
 	{
-		r5::mstudioanimdesc_v12_1_t* const pAnimdesc = seqdesc->pAnimDescV12_1(i);
+		const r5::mstudioanimdesc_v12_1_t* const pAnimdesc = seqdesc->pAnimDescV12_1(i);
 
 		// sanity checks, there are sequences that have animations, but no data for the anim descriptions, and I am unsure how the game checks them.
 		// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
@@ -297,11 +334,14 @@ seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v8_t* const seqdesc, const char* c
 	}
 };
 
-seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v16_t* const seqdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(seqdesc)), szlabel(seqdesc->pszLabel()), szactivityname(seqdesc->pszActivity()), flags(seqdesc->flags), weightlistindex(FIX_OFFSET(seqdesc->weightlistindex)), parsedData(seqdesc->AnimCount())
+seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v16_t* const seqdesc, const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(seqdesc)), szlabel(seqdesc->pszLabel()), szactivityname(seqdesc->pszActivity()), flags(seqdesc->flags), weightlistindex(FIX_OFFSET(seqdesc->weightlistindex)), parsedData(seqdesc->AnimCount())
 {
+	// [rika]: version control
+	UNUSED(animdesc);
+
 	for (uint16_t i = 0; i < seqdesc->AnimCount(); i++)
 	{
-		r5::mstudioanimdesc_v16_t* const pAnimdesc = seqdesc->pAnimDesc(i);
+		const r5::mstudioanimdesc_v16_t* const pAnimdesc = seqdesc->pAnimDesc(i);
 
 		// sanity checks, there are sequences that have animations, but no data for the anim descriptions, and I am unsure how the game checks them.
 		// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
@@ -315,14 +355,41 @@ seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v16_t* const seqdesc, const char* 
 	}
 };
 
-seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v18_t* const seqdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(seqdesc)), szlabel(seqdesc->pszLabel()), szactivityname(seqdesc->pszActivity()), flags(seqdesc->flags), weightlistindex(seqdesc->weightlistindex), parsedData(seqdesc->AnimCount())
+seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v18_t* const seqdesc, const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(seqdesc)), szlabel(seqdesc->pszLabel()), szactivityname(seqdesc->pszActivity()), flags(seqdesc->flags), weightlistindex(seqdesc->weightlistindex), parsedData(seqdesc->AnimCount())
 {
+	// [rika]: version control
+	UNUSED(animdesc);
+
 	if (weightlistindex != 1 && weightlistindex != 3)
 		weightlistindex = FIX_OFFSET(weightlistindex);
 
 	for (uint16_t i = 0; i < seqdesc->AnimCount(); i++)
 	{
-		r5::mstudioanimdesc_v16_t* const pAnimdesc = seqdesc->pAnimDesc(i);
+		const r5::mstudioanimdesc_v16_t* const pAnimdesc = seqdesc->pAnimDesc(i);
+
+		// sanity checks, there are sequences that have animations, but no data for the anim descriptions, and I am unsure how the game checks them.
+		// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
+		if (ANIMDESC_SANITY_CHECK(pAnimdesc))
+		{
+			Log("Sequence %s had animation(s) (index %i), but no animation description, skipping...\n", seqdesc->pszLabel(), i);
+			break;
+		}
+
+		anims.emplace_back(pAnimdesc, ext);
+	}
+};
+
+seqdesc_t::seqdesc_t(const r5::mstudioseqdesc_v18_t* const seqdesc, const r5::mstudioanimdesc_v19_1_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(seqdesc)), szlabel(seqdesc->pszLabel()), szactivityname(seqdesc->pszActivity()), flags(seqdesc->flags), weightlistindex(seqdesc->weightlistindex), parsedData(seqdesc->AnimCount())
+{
+	// [rika]: version control
+	UNUSED(animdesc);
+
+	if (weightlistindex != 1 && weightlistindex != 3)
+		weightlistindex = FIX_OFFSET(weightlistindex);
+
+	for (uint16_t i = 0; i < seqdesc->AnimCount(); i++)
+	{
+		const r5::mstudioanimdesc_v19_1_t* const pAnimdesc = seqdesc->pAnimDesc_V19_1(i);
 
 		// sanity checks, there are sequences that have animations, but no data for the anim descriptions, and I am unsure how the game checks them.
 		// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
@@ -960,7 +1027,7 @@ namespace r5
 
 			if (panim->flags & eStudioAnimFlags::ANIM_DATAPOINT)
 			{
-				const mstudioframemovement_t* const pFrameMovement = reinterpret_cast<const mstudioframemovement_t* const>((char*)panim->baseptr + panim->framemovementindex);
+				const mstudioframemovement_t* const pFrameMovement = reinterpret_cast<const mstudioframemovement_t* const>((char*)panim->baseptr_desc + panim->framemovementindex);
 
 				// [rika]: remove after testing
 #ifdef _DEBUG

@@ -74,7 +74,7 @@ void LoadAnimRigAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelBoneData_v12_1(arigAsset->GetParsedData());
         ParseModelAttachmentData_v8(arigAsset->GetParsedData());
         ParseModelHitboxData_v8(arigAsset->GetParsedData());
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
+        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t, r5::mstudioanimdesc_v12_1_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data), AnimdataFuncType_t::ANIM_FUNC_STALL);
         ParseModelAnimTypes_V8(arigAsset->GetParsedData());
 
         break;
@@ -85,7 +85,7 @@ void LoadAnimRigAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelBoneData_v16(arigAsset->GetParsedData());
         ParseModelAttachmentData_v16(arigAsset->GetParsedData());
         ParseModelHitboxData_v16(arigAsset->GetParsedData());
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v16_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
+        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v16_t, r5::mstudioanimdesc_v16_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data), AnimdataFuncType_t::ANIM_FUNC_STALL);
         ParseModelAnimTypes_V16(arigAsset->GetParsedData());
 
         break;
@@ -95,7 +95,7 @@ void LoadAnimRigAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelBoneData_v16(arigAsset->GetParsedData());
         ParseModelAttachmentData_v16(arigAsset->GetParsedData());
         ParseModelHitboxData_v16(arigAsset->GetParsedData());
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
+        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t, r5::mstudioanimdesc_v16_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data), AnimdataFuncType_t::ANIM_FUNC_STALL);
         ParseModelAnimTypes_V16(arigAsset->GetParsedData());
 
         break;
@@ -105,7 +105,17 @@ void LoadAnimRigAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelBoneData_v19(arigAsset->GetParsedData());
         ParseModelAttachmentData_v16(arigAsset->GetParsedData());
         ParseModelHitboxData_v16(arigAsset->GetParsedData());
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
+        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t, r5::mstudioanimdesc_v16_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data), AnimdataFuncType_t::ANIM_FUNC_STALL);
+        ParseModelAnimTypes_V16(arigAsset->GetParsedData());
+
+        break;
+    }
+    case eMDLVersion::VERSION_19_1:
+    {
+        ParseModelBoneData_v19(arigAsset->GetParsedData());
+        ParseModelAttachmentData_v16(arigAsset->GetParsedData());
+        ParseModelHitboxData_v16(arigAsset->GetParsedData());
+        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t, r5::mstudioanimdesc_v16_t>(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data), AnimdataFuncType_t::ANIM_FUNC_STALL_RETAIL);
         ParseModelAnimTypes_V16(arigAsset->GetParsedData());
 
         break;

@@ -579,11 +579,12 @@ void ParseModelHitboxData_v16(ModelParsedData_t* const parsedData);
 void ParseModelDrawData(ModelParsedData_t* const parsedData, CDXDrawData* const drawData, const uint64_t lod);
 
 void ParseSeqDesc_R2(seqdesc_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const r2::studiohdr_t* const pStudioHdr);
-void ParseSeqDesc_R5(seqdesc_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const bool useStall);
+void ParseSeqDesc_R5(seqdesc_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const AnimdataFuncType_t funcType);
 
 // [rika]: this is for model internal sequence data (r5)
+extern void ParseAnimSeqDataForSeqdesc(seqdesc_t* const seqdesc);
 void ParseModelSequenceData_NoStall(ModelParsedData_t* const parsedData, char* const baseptr);
-template<typename mstudioseqdesc_t> void ParseModelSequenceData_Stall(ModelParsedData_t* const parsedData, char* const baseptr)
+template<typename mstudioseqdesc_t, typename mstudioanimdesc_t> void ParseModelSequenceData_Stall(ModelParsedData_t* const parsedData, char* const baseptr, const AnimdataFuncType_t funcType)
 {
 	assertm(parsedData->bones.size() > 0, "should have bones");
 
@@ -593,12 +594,15 @@ template<typename mstudioseqdesc_t> void ParseModelSequenceData_Stall(ModelParse
 		return;
 
 	parsedData->sequences = new seqdesc_t[pStudioHdr->localSequenceCount];
+	constexpr const mstudioanimdesc_t* const pAnimdescVersion = nullptr;
 
 	for (int i = 0; i < pStudioHdr->localSequenceCount; i++)
 	{
-		parsedData->sequences[i] = seqdesc_t(reinterpret_cast<mstudioseqdesc_t* const>(baseptr + pStudioHdr->localSequenceOffset) + i, nullptr);
+		parsedData->sequences[i] = seqdesc_t(reinterpret_cast<mstudioseqdesc_t* const>(baseptr + pStudioHdr->localSequenceOffset) + i, pAnimdescVersion, nullptr);
 
-		ParseSeqDesc_R5(&parsedData->sequences[i], &parsedData->bones, true);
+		ParseAnimSeqDataForSeqdesc(parsedData->sequences + i);
+
+		ParseSeqDesc_R5(&parsedData->sequences[i], &parsedData->bones, funcType);
 	}
 }
 

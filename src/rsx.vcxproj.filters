@@ -393,6 +393,9 @@
     <ClInclude Include="core\utils\textbuffer.h">
       <Filter>core\utils</Filter>
     </ClInclude>
+    <ClInclude Include="game\rtech\assets\animseq_data.h">
+      <Filter>game\rtech\assets</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -663,6 +666,9 @@
       <Filter>core\mdl</Filter>
     </ClCompile>
     <ClCompile Include="core\render\dxutils.cpp" />
+    <ClCompile Include="game\rtech\assets\animseq_data.cpp">
+      <Filter>game\rtech\assets</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />

@@ -1,10 +1,10 @@
 #include <pch.h>
 
 #include <game/rtech/assets/model.h>
+#include <game/rtech/assets/animseq.h>
 #include <game/rtech/assets/texture.h>
 #include <game/rtech/assets/material.h>
 #include <game/rtech/assets/rson.h>
-#include <game/rtech/assets/animseq.h>
 #include <game/rtech/utils/bvh/bvh.h>
 #include <game/rtech/utils/bsp/bspflags.h>
 
@@ -953,7 +953,7 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
     ModelAsset* mdlAsset = nullptr;
     const AssetPtr_t streamEntry = pakAsset->getStarPakStreamEntry(false); // vertex data is never opt streamed (I hope)
 
-    const eMDLVersion ver = GetModelVersionFromAsset(pakAsset);
+    const eMDLVersion ver = GetModelVersionFromAsset(pakAsset, static_cast<CPakFile* const>(pak));
     switch (ver)
     {
     case eMDLVersion::VERSION_8:
@@ -966,7 +966,6 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v8(pakAsset, mdlAsset);
-        ParseModelSequenceData_NoStall(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
         ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
@@ -983,7 +982,6 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v9(pakAsset, mdlAsset);
-        ParseModelSequenceData_NoStall(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
         ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
@@ -1001,7 +999,6 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v12_1(pakAsset, mdlAsset);
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
         ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
@@ -1016,7 +1013,6 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v12_1(pakAsset, mdlAsset);
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
         ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
@@ -1032,7 +1028,6 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelHitboxData_v8(mdlAsset->GetParsedData());
         ParseModelTextureData_v8(mdlAsset->GetParsedData());
         ParseModelVertexData_v14(pakAsset, mdlAsset);
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
         ParseModelAnimTypes_V8(mdlAsset->GetParsedData());
         break;
     }
@@ -1048,7 +1043,6 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelHitboxData_v16(mdlAsset->GetParsedData());
         ParseModelTextureData_v16(mdlAsset->GetParsedData());
         ParseModelVertexData_v16(pakAsset, mdlAsset);
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v16_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
         ParseModelAnimTypes_V16(mdlAsset->GetParsedData());
         break;
     }
@@ -1063,11 +1057,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelHitboxData_v16(mdlAsset->GetParsedData());
         ParseModelTextureData_v16(mdlAsset->GetParsedData());
         ParseModelVertexData_v16(pakAsset, mdlAsset);
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
         ParseModelAnimTypes_V16(mdlAsset->GetParsedData());
         break;
     }
     case eMDLVersion::VERSION_19:
+    case eMDLVersion::VERSION_19_1:
     {
         ModelAssetHeader_v16_t* hdr = reinterpret_cast<ModelAssetHeader_v16_t*>(pakAsset->header());
         ModelAssetCPU_v16_t* cpu = reinterpret_cast<ModelAssetCPU_v16_t*>(pakAsset->cpu());
@@ -1078,7 +1072,6 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         ParseModelHitboxData_v16(mdlAsset->GetParsedData());
         ParseModelTextureData_v16(mdlAsset->GetParsedData());
         ParseModelVertexData_v16(pakAsset, mdlAsset);
-        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t>(mdlAsset->GetParsedData(), reinterpret_cast<char* const>(mdlAsset->data));
         ParseModelAnimTypes_V16(mdlAsset->GetParsedData());
         break;
     }
@@ -1127,6 +1120,11 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         asset->SetAssetVersion({ 14, 1 });
         break;
     }
+    case eMDLVersion::VERSION_19_1:
+    {
+        asset->SetAssetVersion({ 19, 1 });
+        break;
+    }
     default:
     {
         break;
@@ -1167,6 +1165,56 @@ void PostLoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
             continue;
 
         animSeq->parentModel = !animSeq->parentModel ? modelAsset : animSeq->parentModel;
+    }
+
+    // [rika]: in post load now because it depends on asqd
+    switch (modelAsset->version)
+    {
+    case eMDLVersion::VERSION_8:
+    case eMDLVersion::VERSION_9:
+    case eMDLVersion::VERSION_10:
+    case eMDLVersion::VERSION_11:
+    case eMDLVersion::VERSION_12:
+    {
+        ParseModelSequenceData_NoStall(modelAsset->GetParsedData(), reinterpret_cast<char* const>(modelAsset->data));
+        break;
+    }
+    case eMDLVersion::VERSION_12_1: // has to have its own vertex func
+    case eMDLVersion::VERSION_12_2:
+    case eMDLVersion::VERSION_12_3:
+    case eMDLVersion::VERSION_12_4:
+    case eMDLVersion::VERSION_12_5:
+    case eMDLVersion::VERSION_13:
+    case eMDLVersion::VERSION_13_1:
+    case eMDLVersion::VERSION_14:
+    case eMDLVersion::VERSION_14_1:
+    case eMDLVersion::VERSION_15:
+    {
+        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v8_t, r5::mstudioanimdesc_v12_1_t>(modelAsset->GetParsedData(), reinterpret_cast<char* const>(modelAsset->data), AnimdataFuncType_t::ANIM_FUNC_NOSTALL);
+        break;
+    }
+    case eMDLVersion::VERSION_16:
+    case eMDLVersion::VERSION_17:
+    {
+        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v16_t, r5::mstudioanimdesc_v16_t>(modelAsset->GetParsedData(), reinterpret_cast<char* const>(modelAsset->data), AnimdataFuncType_t::ANIM_FUNC_STALL);
+        break;
+    }
+    case eMDLVersion::VERSION_18:
+    case eMDLVersion::VERSION_19:
+    {
+        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t, r5::mstudioanimdesc_v16_t>(modelAsset->GetParsedData(), reinterpret_cast<char* const>(modelAsset->data), AnimdataFuncType_t::ANIM_FUNC_STALL);
+        break;
+    }
+    case eMDLVersion::VERSION_19_1:
+    {
+        ParseModelSequenceData_Stall<r5::mstudioseqdesc_v18_t, r5::mstudioanimdesc_v19_1_t>(modelAsset->GetParsedData(), reinterpret_cast<char* const>(modelAsset->data), AnimdataFuncType_t::ANIM_FUNC_STALL_RETAIL);
+        break;
+    }
+    default:
+    {
+        assertm(false, "unaccounted asset version, will cause major issues!");
+        return;
+    }
     }
 }
 
@@ -1237,6 +1285,7 @@ static bool ExportModelStreamedData(const ModelAsset* const modelAsset, std::fil
     case eMDLVersion::VERSION_17:
     case eMDLVersion::VERSION_18:
     case eMDLVersion::VERSION_19:
+    case eMDLVersion::VERSION_19_1:
     {
         // special case because of compression
         exportPath.replace_extension(extension);

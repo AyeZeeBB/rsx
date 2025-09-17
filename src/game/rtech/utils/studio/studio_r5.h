@@ -596,8 +596,8 @@ namespace r5
 		int animindexindex;
 		const int AnimIndex(const int i) const { return reinterpret_cast<int*>((char*)this + animindexindex)[i]; }
 		const int AnimCount() const { return  groupsize[0] * groupsize[1]; }
-		mstudioanimdesc_v8_t* pAnimDescV8(const int i) const { return reinterpret_cast<mstudioanimdesc_v8_t*>((char*)this + AnimIndex(i)); }
-		mstudioanimdesc_v12_1_t* pAnimDescV12_1(const int i) const;
+		const mstudioanimdesc_v8_t* const pAnimDescV8(const int i) const { return reinterpret_cast<const mstudioanimdesc_v8_t* const>((char*)this + AnimIndex(i)); }
+		const mstudioanimdesc_v12_1_t* const pAnimDescV12_1(const int i) const;
 
 		int movementindex; // [blend] float array for blended movement
 		int groupsize[2];

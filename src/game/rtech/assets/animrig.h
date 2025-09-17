@@ -96,6 +96,7 @@ public:
 			break;
 		}
 		case eMDLVersion::VERSION_19:
+		case eMDLVersion::VERSION_19_1:
 		{
 			const r5::studiohdr_v17_t* const tmp = reinterpret_cast<const r5::studiohdr_v17_t* const>(data);
 			constexpr int dataPerBone = sizeof(int) + sizeof(short) + (sizeof(Vector) * 3) + (sizeof(Quaternion) * 2) + sizeof(matrix3x4_t);

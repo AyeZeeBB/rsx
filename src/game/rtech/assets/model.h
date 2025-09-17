@@ -180,6 +180,7 @@ enum class eMDLVersion : int
 	VERSION_17,
 	VERSION_18,
 	VERSION_19,
+	VERSION_19_1,
 
 	// bleh
 	VERSION_52,
@@ -202,7 +203,9 @@ static const std::map<int, eMDLVersion> s_mdlVersionMap
 	{ 19, eMDLVersion::VERSION_19 },
 };
 
-inline const eMDLVersion GetModelVersionFromAsset(CPakAsset* const asset)
+constexpr uint64_t s_MdlTimeStamp_V19_1 = 0x01DC1DF805C28000; // 09/05/2025 00:00:00
+
+inline const eMDLVersion GetModelVersionFromAsset(CPakAsset* const asset, CPakFile* const pak)
 {
 	eMDLVersion out = eMDLVersion::VERSION_UNK;
 
@@ -265,6 +268,13 @@ inline const eMDLVersion GetModelVersionFromAsset(CPakAsset* const asset)
 
 		if (modelSizeSingle == static_cast<int>(sizeof(r5::mstudiomodel_v13_1_t)))
 			return eMDLVersion::VERSION_13_1;
+
+		return out;
+	}
+	case eMDLVersion::VERSION_19:
+	{
+		if (pak->header()->createdTime >= s_MdlTimeStamp_V19_1)
+			return eMDLVersion::VERSION_19_1;
 
 		return out;
 	}
@@ -382,6 +392,7 @@ public:
 		case eMDLVersion::VERSION_17:
 		case eMDLVersion::VERSION_18:
 		case eMDLVersion::VERSION_19:
+		case eMDLVersion::VERSION_19_1:
 		{
 			parsedData = ModelParsedData_t(reinterpret_cast<r5::studiohdr_v17_t*>(data), cpu->dataSizePhys, cpu->dataSizeModel);
 			break;
