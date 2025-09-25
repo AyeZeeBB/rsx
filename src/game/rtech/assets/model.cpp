@@ -1628,6 +1628,10 @@ bool ExportModelAsset(CAsset* const asset, const int setting)
         {
             return ExportModelSMD(parsedData, exportPath) && ExportModelQC(parsedData, exportPath, setting, 54);
         }
+        case eModelExportSetting::MODEL_QC:
+        {
+            return ExportModelQC(parsedData, exportPath, setting, 54);
+        }
         case eModelExportSetting::MODEL_STL_VALVE_PHYSICS:
         {
             if (modelAsset->version >= eMDLVersion::VERSION_16)

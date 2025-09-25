@@ -147,7 +147,8 @@ enum eCompressionType : uint8_t
     NONE,
     PAKFILE,
     SNOWFLAKE,
-    OODLE
+    OODLE,
+    ZSTD
 };
 
 class RTech

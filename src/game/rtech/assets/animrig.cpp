@@ -264,6 +264,10 @@ bool ExportAnimRigAsset(CAsset* const asset, const int setting)
     {
         return ExportModelSMD(parsedData, exportPath) && ExportModelQC(parsedData, exportPath, setting, 54);
     }
+    case eAnimRigExportSetting::ANIMRIG_QC:
+    {
+        return ExportModelQC(parsedData, exportPath, setting, 54);
+    }
     default:
     {
         assertm(false, "Export setting is not handled.");

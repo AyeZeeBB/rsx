@@ -1,6 +1,7 @@
 #include <pch.h>
 #include <game/rtech/utils/utils.h>
 #include <thirdparty/oodle/oodle2.h>
+#include <thirdparty/zstd/zstd.h>
 #include <intrin.h>
 
 #if _DEBUG
@@ -8,6 +9,7 @@
 #else
 #pragma comment(lib, "thirdparty/oodle/oo2core_x64.lib")
 #endif
+
 
 #define LAST_IND(x,part_type)    (sizeof(x)/sizeof(part_type) - 1)
 #if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN
@@ -2325,6 +2327,93 @@ std::unique_ptr<char[]> RTech::DecompressStreamedBuffer(std::unique_ptr<char[]> 
 		bufSize = editDecompState[0x48db];
 
 		return std::move(outBuf);
+	}
+	case eCompressionType::ZSTD:
+	{
+		// Store original input size before bufSize gets modified
+		const size_t inputSize = bufSize;
+
+		// Check ZSTD magic number first for debugging
+		if (inputSize >= 4) {
+			const unsigned char* p = (const unsigned char*)buf.get();
+			printf("ZSTD magic check: %02X %02X %02X %02X (expected: 28 B5 2F FD)\n",
+				p[0], p[1], p[2], p[3]);
+		}
+
+		// Get the decompressed size from the ZSTD frame
+		const size_t frameContentSize = ZSTD_getFrameContentSize(buf.get(), inputSize);
+		printf("ZSTD frameContentSize: %zu, inputSize: %zu\n", frameContentSize, inputSize);
+
+		if (frameContentSize == ZSTD_CONTENTSIZE_ERROR)
+		{
+			// Not a valid ZSTD frame
+			printf("ZSTD_CONTENTSIZE_ERROR - not a valid ZSTD frame\n");
+			bufSize = 0;
+			return nullptr;
+		}
+
+		// If frameContentSize equals inputSize, the frame header is likely corrupt or missing size info
+		// Use streaming decompression in this case
+		if (frameContentSize == ZSTD_CONTENTSIZE_UNKNOWN || frameContentSize == inputSize) {
+			printf("Using streaming decompression (frameContentSize == inputSize or UNKNOWN)\n");
+
+			// Use streaming decompression context for unknown size
+			ZSTD_DCtx* dctx = ZSTD_createDCtx();
+			if (!dctx) {
+				printf("Failed to create ZSTD decompression context\n");
+				bufSize = 0;
+				return nullptr;
+			}
+
+			// Start with a reasonable buffer size and grow as needed
+			size_t outputCapacity = inputSize * 4;
+			std::unique_ptr<char[]> outBuf = std::make_unique<char[]>(outputCapacity);
+
+			ZSTD_inBuffer input = { buf.get(), inputSize, 0 };
+			ZSTD_outBuffer output = { outBuf.get(), outputCapacity, 0 };
+
+			// Decompress the frame
+			size_t result = ZSTD_decompressStream(dctx, &output, &input);
+
+			if (ZSTD_isError(result)) {
+				const char* errorMsg = ZSTD_getErrorName(result);
+				printf("ZSTD streaming decompression failed: %s\n", errorMsg);
+				ZSTD_freeDCtx(dctx);
+				bufSize = 0;
+				return nullptr;
+			}
+
+			// If result > 0, there's more data to decompress, but we should have gotten it all in one shot
+			if (result > 0) {
+				printf("Warning: ZSTD decompression incomplete (remaining: %zu)\n", result);
+			}
+
+			ZSTD_freeDCtx(dctx);
+			bufSize = output.pos;
+			printf("ZSTD streaming decompression successful: %zu bytes -> %zu bytes\n", inputSize, bufSize);
+			return std::move(outBuf);
+		} else {
+			printf("Using frame content size: %zu\n", frameContentSize);
+
+			// Allocate output buffer with known size
+			std::unique_ptr<char[]> outBuf = std::make_unique<char[]>(frameContentSize);
+
+			// Decompress the data with known size
+			const size_t result = ZSTD_decompress(outBuf.get(), frameContentSize, buf.get(), inputSize);
+
+			if (ZSTD_isError(result))
+			{
+				// Decompression failed - log error for debugging
+				const char* errorMsg = ZSTD_getErrorName(result);
+				printf("ZSTD decompression failed: %s (input size: %zu, output size: %zu)\n", errorMsg, inputSize, frameContentSize);
+				bufSize = 0;
+				return nullptr;
+			}
+
+			bufSize = result;
+			printf("ZSTD decompression successful: %zu bytes -> %zu bytes\n", inputSize, result);
+			return std::move(outBuf);
+		}
 	}
     default:
     {

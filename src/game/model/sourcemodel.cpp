@@ -555,6 +555,10 @@ bool ExportSourceModelAsset(CAsset* const asset, const int setting)
     {
         return ExportModelSMD(parsedData, exportPath) && ExportModelQC(parsedData, exportPath, settingFixup, srcMdlAsset->GetAssetVersion().majorVer);
     }
+    case eModelExportSetting::MODEL_QC:
+    {
+        return ExportModelQC(parsedData, exportPath, settingFixup, srcMdlAsset->GetAssetVersion().majorVer);
+    }
     default:
     {
         assertm(false, "Export setting is not handled.");

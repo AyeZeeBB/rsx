@@ -740,6 +740,7 @@ enum eModelExportSetting : int
 	MODEL_RMAX,
 	MODEL_RMDL,
 	MODEL_SMD,
+	MODEL_QC,
 
 	// rmdl only for now, but can support sourcemodelasset in the future
 	MODEL_STL_VALVE_PHYSICS,
@@ -754,7 +755,8 @@ static const char* s_ModelExportSettingNames[] =
 	"RMAX",
 	"RMDL",
 	"SMD",
-	"STL (Valve Physics)", 
+	"QC",
+	"STL (Valve Physics)",
 	"STL (Respawn Physics)"
 };
 
@@ -764,6 +766,7 @@ static const char* s_ModelExportExtensions[] =
 	".rmax",
 	".rmdl",
 	".smd",
+	".qc",
 };
 
 enum eAnimRigExportSetting : int
@@ -772,6 +775,7 @@ enum eAnimRigExportSetting : int
 	ANIMRIG_RMAX,
 	ANIMRIG_RRIG,
 	ANIMRIG_SMD,
+	ANIMRIG_QC,
 
 	ANIMRIG_COUNT,
 };
@@ -782,6 +786,7 @@ static const char* s_AnimRigExportSettingNames[] =
 	"RMAX",
 	"RRIG",
 	"SMD",
+	"QC",
 };
 
 enum eAnimSeqExportSetting : int

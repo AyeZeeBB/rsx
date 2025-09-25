@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./build_zstd.bat)",
+      "Bash(build_zstd.bat)",
+      "Bash(cmd /c:*)",
+      "Bash(msbuild:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

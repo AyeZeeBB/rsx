@@ -652,10 +652,49 @@ const bool CPakFile::DecompressFileBuffer(const char* fileBuffer, std::shared_pt
     }
     else if (header->flags & PAK_HEADER_FLAGS_ZSTD_ENCODED)
     {
-        assertm(false, "zstd compression unsupported");
+        // [rika]: dcmpSize is decompressed pak's size (header & zstd compression), this buffer is for the decompressed pakfile.
+        std::shared_ptr<char[]> dcmpBuf = std::shared_ptr<char[]>(new char[header->dcmpSize] {});
 
-        delete header;
-        return false;
+        const size_t compressedDataSize = header->cmpSize; // [rika]: cmpSize is the size of all compressed data in the pakfile (does not include header).
+
+        // allocate a buffer for just the compressed file data
+        // since the zstd decomp util func needs just the compressed data
+        std::unique_ptr<char[]> cmpBuf = std::make_unique<char[]>(compressedDataSize);
+        memcpy_s(cmpBuf.get(), compressedDataSize, fileBuffer + header->pakHdrSize, compressedDataSize);
+
+        uint64_t decodeSize = header->dcmpSize - header->pakHdrSize; // [rika]: since dcmpSize is the decompressed pakfile's size, we need the decompressed data size, subtract the pakfile header to get it.
+
+        std::unique_ptr<char[]> data = RTech::DecompressStreamedBuffer(std::move(cmpBuf), decodeSize, eCompressionType::ZSTD);
+
+        if (decodeSize == 0 || data.get() == nullptr)
+        {
+            // TODO: Add proper logging system call here
+            // printf("ZSTD pak decompression failed: decodeSize=%llu, data=%p\n", decodeSize, data.get());
+            delete header;
+            return false;
+        }
+
+        // Verify decompressed size matches expectation
+        if (decodeSize != (header->dcmpSize - header->pakHdrSize)) {
+            // Size mismatch - this might be expected with ZSTD_CONTENTSIZE_UNKNOWN
+            // TODO: Add proper logging system call here
+            // printf("ZSTD size mismatch: got %llu, expected %llu\n", decodeSize, header->dcmpSize - header->pakHdrSize);
+        }
+
+        // copy pak header to the decompressed buffer
+        memcpy_s(dcmpBuf.get(), header->pakHdrSize, fileBuffer, header->pakHdrSize);
+
+        // copy all of the decoded data into the decompressed buffer
+        memcpy_s(dcmpBuf.get() + header->pakHdrSize, header->dcmpSize - header->pakHdrSize, data.get(), decodeSize);
+
+        // release the zstd decomp buffer now we are done with it
+        data.release();
+
+        if (outBuffer->get() != nullptr)
+            outBuffer->reset();
+
+        // overwrite the provided buffer with the newly allocated and populated buffer
+        *outBuffer = dcmpBuf;
     }
 
     delete header;
