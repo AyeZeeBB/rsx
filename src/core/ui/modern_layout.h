@@ -80,6 +80,7 @@ namespace ModernUI
         void RenderSafeTexturePreview(void* pakAsset);
         void RenderMinimalTextureImage(void* pakAsset, void* txtrAsset);
         void RenderTextureViewer(CAsset* textureAsset);
+        void RenderMaterialViewer(CAsset* materialAsset);
         void RenderModel3DViewport();
         
         // UI State

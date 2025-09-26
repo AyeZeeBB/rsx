@@ -13,6 +13,7 @@
 #include <core/filehandling/load.h>
 #include <game/rtech/cpakfile.h>
 #include <game/rtech/assets/texture.h>
+#include <game/rtech/assets/material.h>
 #include <core/input/input.h>
 
 // External declarations
@@ -300,7 +301,7 @@ namespace ModernUI
             // Create horizontal splitter for main area
             if (ImGui::BeginChild("MainArea", ImVec2(0, mainAreaHeight), false, ImGuiWindowFlags_NoScrollbar))
             {
-                // Left panel
+                // Left panel with padding
                 if (m_panelVisible[static_cast<int>(PanelType::AssetBrowser)])
                 {
                     if (ImGui::BeginChild("LeftPanel", ImVec2(m_leftPanelWidth, 0), true))
@@ -447,7 +448,11 @@ namespace ModernUI
 
     void LayoutManager::RenderAssetBrowser()
     {
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
+        
+        // Add manual padding with spacing and indentation
+        ImGui::Spacing();
+        ImGui::Indent(8.0f);
         
         // Header with title and controls
         ImGui::Text("Asset Browser");
@@ -571,11 +576,17 @@ namespace ModernUI
         }
         ImGui::EndChild();
         
+        ImGui::Unindent(8.0f);
+        ImGui::Spacing();
         ImGui::PopStyleVar();
     }
 
     void LayoutManager::RenderAssetInspector()
     {
+        // Add manual padding
+        ImGui::Spacing();
+        ImGui::Indent(8.0f);
+        
         ImGui::Text("Asset Inspector");
         
         if (ImGui::SmallButton("Refresh"))
@@ -723,13 +734,22 @@ namespace ModernUI
             std::string guidStr2 = std::format("{:016X}", primaryAsset->GetAssetGUID());
             ImGui::SetClipboardText(guidStr2.c_str());
         }
+        
+        ImGui::Unindent(8.0f);
+        ImGui::Spacing();
     }
 
     void LayoutManager::RenderViewport3D()
     {
-        // Check if we have a texture selected
+        // Add manual padding
+        ImGui::Spacing();
+        ImGui::Indent(8.0f);
+        
+        // Check if we have a texture or material selected
         bool hasTextureSelected = false;
+        bool hasMaterialSelected = false;
         CAsset* textureAsset = nullptr;
+        CAsset* materialAsset = nullptr;
         
         if (!m_selectedAssets.empty()) {
             CAsset* firstAsset = m_selectedAssets[0];
@@ -741,6 +761,11 @@ namespace ModernUI
                         hasTextureSelected = true;
                         textureAsset = firstAsset;
                     }
+                    // Check for material type: 'matl' (0x6C74616D)
+                    else if (assetType == 0x6C74616D) {
+                        hasMaterialSelected = true;
+                        materialAsset = firstAsset;
+                    }
                 } catch (...) {
                     // Asset type couldn't be read
                 }
@@ -750,6 +775,12 @@ namespace ModernUI
         if (hasTextureSelected && textureAsset) {
             // Show texture viewer instead of 3D viewport
             RenderTextureViewer(textureAsset);
+            return;
+        }
+        
+        if (hasMaterialSelected && materialAsset) {
+            // Show material viewer instead of 3D viewport
+            RenderMaterialViewer(materialAsset);
             return;
         }
         
@@ -847,18 +878,24 @@ namespace ModernUI
             }
             ImGui::EndChild();
         }
+        
+        ImGui::Unindent(8.0f);
+        ImGui::Spacing();
     }
 
     void LayoutManager::RenderAssetPreview()
     {
-        ImGui::Text("Asset Preview");
-        ImGui::Separator();
+        // Add manual padding
+        ImGui::Spacing();
+        ImGui::Indent(8.0f);
         
         if (m_selectedAssets.empty())
         {
             ImGui::TextDisabled("No asset selected");
             ImGui::Spacing();
             ImGui::TextWrapped("Select an asset from the Asset Browser to preview it here.");
+            ImGui::Unindent(8.0f);
+            ImGui::Spacing();
             return;
         }
         
@@ -869,13 +906,6 @@ namespace ModernUI
         uint32_t assetType = asset->GetAssetType();
         auto it = g_assetData.m_assetTypeBindings.find(assetType);
         
-        // TEXTURE PREVIEW DISABLED - CAUSING CRASHES
-        // TODO: Investigate texture preview crashes and re-enable safely
-        //if (false && it != g_assetData.m_assetTypeBindings.end() && it->second.previewFunc)
-        //{
-            // Preview functions completely disabled until crash source is identified
-        //}
-        //else
         {
             // Safe asset info display with minimal operations
             ImGui::Text("Asset Information");
@@ -943,10 +973,17 @@ namespace ModernUI
                 }
             }
         }
+        
+        ImGui::Unindent(8.0f);
+        ImGui::Spacing();
     }
 
     void LayoutManager::RenderProperties()
     {
+        // Add manual padding
+        ImGui::Spacing();
+        ImGui::Indent(8.0f);
+        
         ImGui::Text("Properties");
         ImGui::Separator();
         
@@ -1007,10 +1044,17 @@ namespace ModernUI
             embedTextures = false;
             compressionLevel = 5;
         }
+        
+        ImGui::Unindent(8.0f);
+        ImGui::Spacing();
     }
 
     void LayoutManager::RenderConsole()
     {
+        // Add manual padding
+        ImGui::Spacing();
+        ImGui::Indent(8.0f);
+        
         ImGui::Text("Console");
         
         // Console controls
@@ -1065,6 +1109,9 @@ namespace ModernUI
                 memset(commandBuffer, 0, sizeof(commandBuffer));
             }
         }
+        
+        ImGui::Unindent(8.0f);
+        ImGui::Spacing();
     }
 
     void LayoutManager::BuildAssetTree()
@@ -1475,9 +1522,7 @@ namespace ModernUI
         // Static cache for textures to avoid recreating them
         static std::unordered_map<void*, std::shared_ptr<void>> textureCache;
         static void* lastAsset = nullptr;
-        
-        ImGui::Text("🖼️ Texture Image:");
-        
+
         // Try to create and display the actual texture
         static std::unordered_map<void*, std::shared_ptr<CTexture>> renderedTextures;
         
@@ -1539,9 +1584,6 @@ namespace ModernUI
         
         // Display the texture if we have one
         if (displayTexture) {
-            ImGui::Spacing();
-            ImGui::Text("🖼️ Texture Preview:");
-            
             // Get the texture SRV for rendering
             void* srv = displayTexture->GetSRV();
             if (srv) {
@@ -1960,6 +2002,258 @@ namespace ModernUI
                 }
             }
             ImGui::EndChild();
+        }
+    }
+
+    void LayoutManager::RenderMaterialViewer(CAsset* materialAsset)
+    {
+        if (!materialAsset) {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid material asset");
+            return;
+        }
+
+        try {
+            CPakAsset* pakAsset = static_cast<CPakAsset*>(materialAsset);
+            if (!pakAsset || !pakAsset->extraData()) {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Material data not loaded");
+                return;
+            }
+
+            // Get the MaterialAsset data
+            const MaterialAsset* const material = reinterpret_cast<MaterialAsset*>(pakAsset->extraData());
+            if (!material) {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to cast material data");
+                return;
+            }
+
+            // Display material header
+            ImGui::Text("Material: %s", materialAsset->GetAssetName().c_str());
+            ImGui::Separator();
+
+            // Basic material info
+            if (ImGui::BeginChild("MaterialInfo", ImVec2(0, 0), false, ImGuiWindowFlags_NoBackground))
+            {
+                ImGui::Text("GUID: 0x%016llX", material->guid);
+                ImGui::Text("Name: %s", material->name ? material->name : "N/A");
+                
+                if (material->surfaceProp)
+                    ImGui::Text("Surface Property: %s", material->surfaceProp);
+                if (material->surfaceProp2)
+                    ImGui::Text("Surface Property 2: %s", material->surfaceProp2);
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+                
+                // Safe material preview implementation to avoid crashes
+                if (ImGui::BeginTabBar("MaterialTabs"))
+                {
+                    if (ImGui::BeginTabItem("Textures"))
+                    {
+                        // Popup state variables
+                        static bool showTexturePopup = false;
+                        static CAsset* popupTexture = nullptr;
+                        
+                        if (material->txtrAssets.empty()) {
+                            ImGui::TextDisabled("No textures found in this material");
+                        } else {
+
+                            // Table of textures
+                            if (ImGui::BeginTable("MaterialTextures", 7, 
+                                ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | 
+                                ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | 
+                                ImGuiTableFlags_ScrollY))
+                            {
+                                ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+                                ImGui::TableSetupColumn("GUID", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+                                ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                                ImGui::TableSetupColumn("Dimensions", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                                ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                                ImGui::TableSetupColumn("View", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+                                ImGui::TableHeadersRow();
+
+                                for (size_t i = 0; i < material->txtrAssets.size(); ++i) {
+                                    const TextureAssetEntry_t& entry = material->txtrAssets[i];
+                                    
+                                    ImGui::PushID(static_cast<int>(i));
+                                    ImGui::TableNextRow();
+
+                                    if (ImGui::TableSetColumnIndex(0)) {
+                                        ImGui::Text("%d", entry.index);
+                                    }
+
+                                    if (ImGui::TableSetColumnIndex(1)) {
+                                        uint64_t guid = reinterpret_cast<const uint64_t*>(material->textureHandles)[entry.index];
+                                        ImGui::Text("0x%016llX", guid);
+                                    }
+
+                                    if (ImGui::TableSetColumnIndex(2)) {
+                                        if (entry.asset) {
+                                            std::string filename = std::filesystem::path(entry.asset->GetAssetName()).filename().string();
+                                            ImGui::TextUnformatted(filename.c_str());
+                                        } else {
+                                            uint64_t guid = reinterpret_cast<const uint64_t*>(material->textureHandles)[entry.index];
+                                            ImGui::Text("0x%016llX", guid);
+                                        }
+                                    }
+
+                                    if (ImGui::TableSetColumnIndex(3)) {
+                                        if (material->resourceBindings.count(entry.index)) {
+                                            ImGui::TextUnformatted(material->resourceBindings.at(entry.index).name);
+                                        } else {
+                                            ImGui::TextDisabled("[unknown]");
+                                        }
+                                    }
+
+                                    if (ImGui::TableSetColumnIndex(4)) {
+                                        if (entry.asset) {
+                                            try {
+                                                const TextureAsset* texAsset = reinterpret_cast<const TextureAsset*>(entry.asset->extraData());
+                                                if (texAsset) {
+                                                    ImGui::Text("%d x %d", texAsset->width, texAsset->height);
+                                                } else {
+                                                    ImGui::TextDisabled("N/A");
+                                                }
+                                            } catch (...) {
+                                                ImGui::TextDisabled("Error");
+                                            }
+                                        } else {
+                                            ImGui::TextDisabled("N/A");
+                                        }
+                                    }
+
+                                    if (ImGui::TableSetColumnIndex(5)) {
+                                        if (entry.asset) {
+                                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+                                            ImGui::TextUnformatted("Loaded");
+                                            ImGui::PopStyleColor();
+                                        } else {
+                                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+                                            ImGui::TextUnformatted("Not Loaded");
+                                            ImGui::PopStyleColor();
+                                        }
+                                    }
+
+                                    if (ImGui::TableSetColumnIndex(6)) {
+                                        if (entry.asset) {
+                                            std::string buttonId = std::format("View##texture_{}", i);
+                                            if (ImGui::Button(buttonId.c_str(), ImVec2(50, 0))) {
+                                                // Debug output
+                                                printf("View button clicked for texture: %s\n", entry.asset->GetAssetName().c_str());
+                                                
+                                                // Open texture popup
+                                                popupTexture = entry.asset;
+                                                showTexturePopup = true;
+                                                
+                                                printf("Popup state set: showTexturePopup=%d, popupTexture=%p\n", 
+                                                    showTexturePopup, popupTexture);
+                                            }
+                                        } else {
+                                            ImGui::TextDisabled("N/A");
+                                        }
+                                    }
+
+                                    ImGui::PopID();
+                                }
+
+                                ImGui::EndTable();
+                            }
+ 
+                            // Clean texture preview window with proper layout
+                            if (showTexturePopup) {
+                                ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_Appearing);
+                                ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(1200, 800));
+                                
+                                if (ImGui::Begin("Texture Preview", &showTexturePopup)) {
+                                    if (popupTexture) {
+                                        try {
+                                            CPakAsset* pakTexture = static_cast<CPakAsset*>(popupTexture);
+                                            if (pakTexture && pakTexture->extraData()) {
+                                                const TextureAsset* texAsset = reinterpret_cast<const TextureAsset*>(pakTexture->extraData());
+                                                if (texAsset) {
+                                                    // Header
+                                                    ImGui::Text("Texture: %s", popupTexture->GetAssetName().c_str());
+                                                    ImGui::Separator();
+                                                    
+                                                    // Content area with reserved space for close button
+                                                    const float footerHeight = 40.0f;
+                                                    if (ImGui::BeginChild("Content", ImVec2(0, -footerHeight))) {
+                                                        // Basic info in a compact format
+                                                        ImGui::Text("Size: %dx%d | Format: %u | Mips: %u | Arrays: %u", 
+                                                            texAsset->width, texAsset->height,
+                                                            static_cast<uint32_t>(texAsset->imgFormat),
+                                                            texAsset->totalMipLevels, texAsset->arraySize);
+                                                        
+                                                        ImGui::Spacing();
+                                                        
+                                                        // Simple texture display - just call the safe function without complex layout
+                                                        RenderMinimalTextureImage(pakTexture, const_cast<void*>(static_cast<const void*>(texAsset)));
+                                                    }
+                                                    ImGui::EndChild();
+                                                    
+                                                    // Footer with close button
+                                                    ImGui::Separator();
+                                                    float buttonWidth = 80.0f;
+                                                    float windowWidth = ImGui::GetWindowWidth();
+                                                    ImGui::SetCursorPosX((windowWidth - buttonWidth) * 0.5f);
+                                                    
+                                                    if (ImGui::Button("Close", ImVec2(buttonWidth, 0))) {
+                                                        showTexturePopup = false;
+                                                        popupTexture = nullptr;
+                                                    }
+                                                } else {
+                                                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Invalid texture data");
+                                                }
+                                            } else {
+                                                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Texture not loaded");
+                                            }
+                                        } catch (...) {
+                                            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error loading texture");
+                                        }
+                                    }
+                                    ImGui::End();
+                                }
+                            }
+                            
+                            // Handle popup closing via X button or Escape
+                            if (!showTexturePopup && popupTexture) {
+                                popupTexture = nullptr;
+                            }
+                        }
+                        ImGui::EndTabItem();
+                    }
+
+                    if (ImGui::BeginTabItem("Properties"))
+                    {
+                        if (ImGui::TreeNode("Flags"))
+                        {
+                            ImGui::Text("Glue Flags: 0x%08X", material->glueFlags);
+                            ImGui::Text("Glue Flags2: 0x%08X", material->glueFlags2);
+                            ImGui::Text("Uber Buffer Flags: 0x%02X", material->uberBufferFlags);
+                            ImGui::TreePop();
+                        }
+
+                        if (ImGui::TreeNode("Samplers"))
+                        {
+                            for (int i = 0; i < 4; ++i) {
+                                ImGui::Text("Sampler[%d]: 0x%02X", i, static_cast<unsigned char>(material->samplers[i]));
+                            }
+                            ImGui::TreePop();
+                        }
+
+                        ImGui::EndTabItem();
+                    }
+
+                    ImGui::EndTabBar();
+                }
+            }
+            ImGui::EndChild();
+
+        } catch (const std::exception& e) {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error viewing material: %s", e.what());
+        } catch (...) {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Unknown error viewing material");
         }
     }
 }
