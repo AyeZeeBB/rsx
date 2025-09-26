@@ -332,93 +332,8 @@ namespace ModernUI
 
                 if (ImGui::BeginChild("CenterArea", ImVec2(centerWidth, 0), false))
                 {
-                    // Check if we should show MaterialPreview (only when enabled AND material selected)
-                    bool shouldShowMaterialPreview = false;
-                    if (m_panelVisible[static_cast<int>(PanelType::MaterialPreview)] && !m_selectedAssets.empty()) {
-                        CAsset* firstAsset = m_selectedAssets[0];
-                        if (firstAsset) {
-                            try {
-                                uint32_t assetType = firstAsset->GetAssetType();
-                                if (assetType == 0x6C74616D) { // 'matl' - Material type
-                                    shouldShowMaterialPreview = true;
-                                }
-                            } catch (...) {
-                                // Asset type couldn't be read
-                            }
-                        }
-                    }
-
-                    // Priority order: MaterialPreview (when material selected) > ModelViewer3D > Viewport3D > AssetPreview
-                    if (shouldShowMaterialPreview)
-                    {
-                        RenderMaterialPreview();
-                    }
-                    else if (m_panelVisible[static_cast<int>(PanelType::ModelViewer3D)])
-                    {
-                        // Check if we have texture/material selected first
-                        bool hasTextureSelected = false;
-                        bool hasMaterialSelected = false;
-                        CAsset* textureAsset = nullptr;
-                        CAsset* materialAsset = nullptr;
-
-                        if (!m_selectedAssets.empty()) {
-                            CAsset* firstAsset = m_selectedAssets[0];
-                            if (firstAsset) {
-                                try {
-                                    uint32_t assetType = firstAsset->GetAssetType();
-                                    // Check for texture types: 'rtxt' (0x72747874) or 'txtr' (0x74787472)
-                                    if (assetType == 0x72747874 || assetType == 0x74787472) {
-                                        hasTextureSelected = true;
-                                        textureAsset = firstAsset;
-                                    }
-                                    // Check for material type: 'matl' (0x6C74616D)
-                                    else if (assetType == 0x6C74616D) {
-                                        hasMaterialSelected = true;
-                                        materialAsset = firstAsset;
-                                    }
-                                } catch (...) {
-                                    // Asset type couldn't be read
-                                }
-                            }
-                        }
-
-                        if (hasTextureSelected && textureAsset) {
-                            // Show texture viewer instead of 3D model viewer
-                            RenderTextureViewer(textureAsset);
-                        }
-                        else if (hasMaterialSelected && materialAsset && !m_panelVisible[static_cast<int>(PanelType::MaterialPreview)]) {
-                            // Show material viewer instead of 3D model viewer (only if MaterialPreview panel is disabled)
-                            RenderMaterialViewer(materialAsset);
-                        }
-                        else {
-                            // Use the new 3D Model Viewer for 3D models
-                            RenderModelViewer3D();
-                        }
-                    }
-                    else if (m_panelVisible[static_cast<int>(PanelType::Viewport3D)] && m_panelVisible[static_cast<int>(PanelType::AssetPreview)])
-                    {
-                        // Split center area vertically if both old viewport and preview are visible
-                        const float centerHeight = ImGui::GetContentRegionAvail().y;
-                        if (ImGui::BeginChild("ViewportArea", ImVec2(0, centerHeight * 0.6f), true))
-                        {
-                            RenderViewport3D();
-                        }
-                        ImGui::EndChild();
-
-                        if (ImGui::BeginChild("PreviewArea", ImVec2(0, 0), true))
-                        {
-                            RenderAssetPreview();
-                        }
-                        ImGui::EndChild();
-                    }
-                    else if (m_panelVisible[static_cast<int>(PanelType::Viewport3D)])
-                    {
-                        RenderViewport3D();
-                    }
-                    else if (m_panelVisible[static_cast<int>(PanelType::AssetPreview)])
-                    {
-                        RenderAssetPreview();
-                    }
+                    // Render Godot-style tabbed center panel
+                    RenderTabbedCenterPanel();
                 }
                 ImGui::EndChild();
 
@@ -546,25 +461,13 @@ namespace ModernUI
         
         // Header with title and controls
         ImGui::Text("Asset Browser");
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Refresh"))
-        {
-            RefreshAssetTree();
-        }
         
         // Show loading indicator when PAKs are loading
         if (currentJobActionState) {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Loading...");
         }
-        
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Force Rebuild"))
-        {
-            m_assetTreeRoot.children.clear();
-            BuildAssetTree();
-        }
-        
+
         ImGui::Separator();
         
         // Auto-refresh disabled to prevent freezing
@@ -679,87 +582,143 @@ namespace ModernUI
 
     void LayoutManager::RenderAssetInspector()
     {
-        // Add manual padding
+        // Add manual padding for consistent layout
         ImGui::Spacing();
         ImGui::Indent(8.0f);
-        
+
+        // Modern header with better styling
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
+
+        // Header section
         ImGui::Text("Asset Inspector");
-        
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - 60);
         if (ImGui::SmallButton("Refresh"))
         {
             // Force refresh inspector
         }
-        
+
         ImGui::Separator();
-        
+        ImGui::Spacing();
+
         if (m_selectedAssets.empty())
         {
-            ImGui::TextDisabled("No asset selected");
-            ImGui::Spacing();
-            ImGui::TextWrapped("Select an asset from the Asset Browser to view its details here.");
+            // Empty state with better visual design
+            ImVec2 center = ImVec2(
+                ImGui::GetContentRegionAvail().x * 0.5f - 80,
+                ImGui::GetContentRegionAvail().y * 0.4f
+            );
+            ImGui::SetCursorPos(center);
+
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+            ImGui::Text("No asset selected");
+            ImGui::PopStyleColor();
+
+            ImGui::SetCursorPosX(center.x - 30);
+            ImGui::SetCursorPosY(center.y + 25);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+            ImGui::TextWrapped("Select an asset to view details");
+            ImGui::PopStyleColor();
+
+            ImGui::PopStyleVar();
             return;
         }
-        
+
         CAsset* primaryAsset = m_selectedAssets[0];
-        
-        // Asset basic info
-        DrawSeparatorWithText("Basic Information");
-        
-        ImGui::Spacing();
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("Name:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(-1);
-        static char assetNameBuffer[512];
-        strncpy_s(assetNameBuffer, primaryAsset->GetAssetName().c_str(), sizeof(assetNameBuffer) - 1);
-        if (ImGui::InputText("##AssetName", assetNameBuffer, sizeof(assetNameBuffer), ImGuiInputTextFlags_ReadOnly))
-        {
-            // Read-only for now
-        }
-        
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("GUID:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(-1);
-        static char guidBuffer[32];
+
+        // Get asset info
+        std::string assetName = primaryAsset->GetAssetName();
         std::string guidStr = std::format("{:016X}", primaryAsset->GetAssetGUID());
-        strncpy_s(guidBuffer, guidStr.c_str(), sizeof(guidBuffer) - 1);
-        ImGui::InputText("##AssetGUID", guidBuffer, sizeof(guidBuffer), ImGuiInputTextFlags_ReadOnly);
-        
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("Type:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(-1);
-        static char typeBuffer[128];
         uint32_t assetType = primaryAsset->GetAssetType();
         char typeBytes[5] = {0};
         memcpy(typeBytes, &assetType, 4);
         for (int i = 0; i < 4; ++i) {
             if (typeBytes[i] < 32 || typeBytes[i] > 126) typeBytes[i] = '?';
         }
-        std::string typeStr = std::format("Type: {}", typeBytes);
-        strncpy_s(typeBuffer, typeStr.c_str(), sizeof(typeBuffer) - 1);
-        ImGui::InputText("##AssetType", typeBuffer, sizeof(typeBuffer), ImGuiInputTextFlags_ReadOnly);
-        
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("Container:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(-1);
-        static char containerBuffer[512];
-        strncpy_s(containerBuffer, primaryAsset->GetContainerFileName().c_str(), sizeof(containerBuffer) - 1);
-        ImGui::InputText("##AssetContainer", containerBuffer, sizeof(containerBuffer), ImGuiInputTextFlags_ReadOnly);
-        
-        // Version info
-        const auto& version = primaryAsset->GetAssetVersion();
-        if (version.majorVer > 0 || version.minorVer > 0)
+        std::string containerName = primaryAsset->GetContainerFileName();
+
+        // Extract filename from full path for cleaner display
+        std::string fileName = assetName;
+        size_t lastSlash = assetName.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            fileName = assetName.substr(lastSlash + 1);
+        }
+
+        // Modern card-style layout
+        ImGui::BeginChild("AssetCard", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+
+        // Asset header with icon and name
+        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Use default font but can be changed to bold later
+        ImGui::Text("Name: %s", fileName.c_str());
+        ImGui::PopFont();
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+        ImGui::Text("Type: %s", typeBytes);
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Property section with better layout
+        if (ImGui::BeginTable("AssetProperties", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
         {
+            ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+            // File Name row
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
-            ImGui::Text("Version:");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(-1);
-            static char versionBuffer[64];
-            strncpy_s(versionBuffer, version.ToString().c_str(), sizeof(versionBuffer) - 1);
-            ImGui::InputText("##AssetVersion", versionBuffer, sizeof(versionBuffer), ImGuiInputTextFlags_ReadOnly);
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Name");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::PushItemWidth(-1);
+            std::string nameDisplay = fileName;
+            ImGui::InputText("##AssetName", nameDisplay.data(), nameDisplay.size(), ImGuiInputTextFlags_ReadOnly);
+            ImGui::PopItemWidth();
+
+            // GUID row
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "GUID");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::PushItemWidth(-1);
+            ImGui::InputText("##AssetGUID", guidStr.data(), guidStr.size(), ImGuiInputTextFlags_ReadOnly);
+            ImGui::PopItemWidth();
+
+            // Container row
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Package");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::PushItemWidth(-1);
+            // Show just the filename of the container for cleaner look
+            std::string containerFile = containerName;
+            size_t containerSlash = containerName.find_last_of("/\\");
+            if (containerSlash != std::string::npos) {
+                containerFile = containerName.substr(containerSlash + 1);
+            }
+            ImGui::InputText("##AssetContainer", containerFile.data(), containerFile.size(), ImGuiInputTextFlags_ReadOnly);
+            ImGui::PopItemWidth();
+
+            // Version info (if available)
+            const auto& version = primaryAsset->GetAssetVersion();
+            if (version.majorVer > 0 || version.minorVer > 0)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Version");
+                ImGui::TableSetColumnIndex(1);
+                ImGui::PushItemWidth(-1);
+                std::string versionStr = version.ToString();
+                ImGui::InputText("##AssetVersion", versionStr.data(), versionStr.size(), ImGuiInputTextFlags_ReadOnly);
+                ImGui::PopItemWidth();
+            }
+
+            ImGui::EndTable();
         }
         
         ImGui::Spacing();
@@ -847,7 +806,8 @@ namespace ModernUI
         
         // Export status
         DrawSeparatorWithText("Export Status");
-        
+        ImGui::Spacing();
+
         ImGui::AlignTextToFramePadding();
         ImGui::Text("Exported:");
         ImGui::SameLine();
@@ -893,28 +853,35 @@ namespace ModernUI
         }
         
         ImGui::Spacing();
-        
-        // Action buttons
-        DrawSeparatorWithText("Actions");
-        
-        if (ImGui::Button("Export Selected", ImVec2(-1, 0)))
+
+        // Action buttons section
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Actions");
+        ImGui::Spacing();
+
+        if (ImGui::Button("Copy Name", ImVec2(-1, 0)))
         {
-            // TODO: Export selected assets
+            ImGui::SetClipboardText(fileName.c_str());
         }
-        
-        if (ImGui::Button("Copy Name to Clipboard", ImVec2(-1, 0)))
+
+        if (ImGui::Button("Copy GUID", ImVec2(-1, 0)))
         {
-            ImGui::SetClipboardText(primaryAsset->GetAssetName().c_str());
+            ImGui::SetClipboardText(guidStr.c_str());
         }
-        
-        if (ImGui::Button("Copy GUID to Clipboard", ImVec2(-1, 0)))
+
+        if (ImGui::Button("Open in Tab", ImVec2(-1, 0)))
         {
-            std::string guidStr2 = std::format("{:016X}", primaryAsset->GetAssetGUID());
-            ImGui::SetClipboardText(guidStr2.c_str());
+            OpenAssetInTab(primaryAsset);
         }
-        
+
+        ImGui::EndChild();
+
         ImGui::Unindent(8.0f);
         ImGui::Spacing();
+        ImGui::PopStyleVar();
     }
 
     void LayoutManager::RenderViewport3D()
@@ -1158,73 +1125,164 @@ namespace ModernUI
 
     void LayoutManager::RenderProperties()
     {
-        // Add manual padding
+        // Add manual padding for consistent layout
         ImGui::Spacing();
         ImGui::Indent(8.0f);
-        
-        ImGui::Text("Properties");
+
+        // Modern header with better styling
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
+
+        // Header section
+        ImGui::Text("Application Settings");
         ImGui::Separator();
-        
-        // Application settings and properties
-        DrawSeparatorWithText("Display Settings");
-        
-        static bool enableVSync = true;
-        ImGui::Checkbox("Enable VSync", &enableVSync);
-        
-        static int targetFPS = 60;
-        ImGui::SliderInt("Target FPS", &targetFPS, 30, 144);
-        
-        DrawSeparatorWithText("Asset Browser");
-        
-        ImGui::Checkbox("Tree View by Default", &m_showAssetTreeView);
-        
-        static bool showFileExtensions = true;
-        ImGui::Checkbox("Show File Extensions", &showFileExtensions);
-        
-        static bool autoRefresh = false;
-        ImGui::Checkbox("Auto Refresh", &autoRefresh);
-        
-        DrawSeparatorWithText("Viewport");
-        
-        static bool showGrid = true;
-        ImGui::Checkbox("Show Grid", &showGrid);
-        
-        static bool showAxes = true;
-        ImGui::Checkbox("Show Axes", &showAxes);
-        
-        static float backgroundColor[3] = {0.05f, 0.05f, 0.05f};
-        ImGui::ColorEdit3("Background Color", backgroundColor);
-        
-        DrawSeparatorWithText("Export Settings");
-        
-        static bool preserveHierarchy = true;
-        ImGui::Checkbox("Preserve Hierarchy", &preserveHierarchy);
-        
-        static bool embedTextures = false;
-        ImGui::Checkbox("Embed Textures", &embedTextures);
-        
-        static int compressionLevel = 5;
-        ImGui::SliderInt("Compression Level", &compressionLevel, 0, 9);
-        
         ImGui::Spacing();
-        
-        if (ImGui::Button("Reset to Defaults", ImVec2(-1, 0)))
+
+        // Create scrollable content area
+        if (ImGui::BeginChild("PropertiesContent", ImVec2(0, 0), false, ImGuiWindowFlags_NoBackground))
         {
-            // Reset all settings to defaults
-            enableVSync = true;
-            targetFPS = 60;
-            showFileExtensions = true;
-            autoRefresh = false;
-            showGrid = true;
-            showAxes = true;
-            backgroundColor[0] = backgroundColor[1] = backgroundColor[2] = 0.05f;
-            preserveHierarchy = true;
-            embedTextures = false;
-            compressionLevel = 5;
+            // Display Settings Section
+            ImGui::TextColored(ImVec4(0.7f, 0.9f, 0.3f, 1.0f), "Display Settings");
+            ImGui::Spacing();
+
+            static bool enableVSync = true;
+            ImGui::Checkbox("Enable VSync", &enableVSync);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Synchronize rendering with display refresh rate");
+            }
+
+            static int targetFPS = 60;
+            ImGui::SliderInt("Target FPS", &targetFPS, 30, 144);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Maximum frames per second when VSync is disabled");
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Asset Browser Section
+            ImGui::TextColored(ImVec4(0.3f, 0.7f, 0.9f, 1.0f), "Asset Browser");
+            ImGui::Spacing();
+
+            ImGui::Checkbox("Tree View by Default", &m_showAssetTreeView);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Show hierarchical tree view instead of flat list");
+            }
+
+            static bool showFileExtensions = true;
+            ImGui::Checkbox("Show File Extensions", &showFileExtensions);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Display file extensions in asset names");
+            }
+
+            static bool autoRefresh = false;
+            ImGui::Checkbox("Auto Refresh", &autoRefresh);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Automatically refresh asset list when files change");
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Viewport Settings Section
+            ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.7f, 1.0f), "3D Viewport");
+            ImGui::Spacing();
+
+            static bool showGrid = true;
+            ImGui::Checkbox("Show Grid", &showGrid);
+
+            static bool showAxes = true;
+            ImGui::Checkbox("Show Axes", &showAxes);
+
+            static float backgroundColor[3] = {0.05f, 0.05f, 0.05f};
+            ImGui::ColorEdit3("Background Color", backgroundColor);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Material Preview Section
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.3f, 1.0f), "Material Preview");
+            ImGui::Spacing();
+
+            ImGui::Checkbox("Auto-rotate Materials", &m_materialSphereState.autoRotate);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Automatically rotate material preview sphere");
+            }
+
+            ImGui::SliderFloat("Rotation Speed", &m_materialSphereState.rotationSpeed, 0.1f, 5.0f);
+            ImGui::SliderFloat("Sphere Scale", &m_materialSphereState.sphereScale, 0.5f, 3.0f);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Export Settings Section
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.7f, 1.0f), "Export Settings");
+            ImGui::Spacing();
+
+            static bool preserveHierarchy = true;
+            ImGui::Checkbox("Preserve Hierarchy", &preserveHierarchy);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Maintain folder structure when exporting");
+            }
+
+            static bool embedTextures = false;
+            ImGui::Checkbox("Embed Textures", &embedTextures);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Include texture data in exported files");
+            }
+
+            static int compressionLevel = 5;
+            ImGui::SliderInt("Compression Level", &compressionLevel, 0, 9);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Higher values = smaller files, slower export");
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Advanced Settings Section
+            ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.3f, 1.0f), "Advanced");
+            ImGui::Spacing();
+
+            static int maxCacheSize = 512;
+            ImGui::SliderInt("Cache Size (MB)", &maxCacheSize, 128, 2048);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Maximum memory for texture and model cache");
+            }
+
+            static int threadCount = 4;
+            ImGui::SliderInt("Worker Threads", &threadCount, 1, 16);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Number of threads for asset processing");
+            }
+
+            if (ImGui::Button("Reset to Defaults", ImVec2(-1, 0)))
+            {
+                // Reset all settings to defaults
+                enableVSync = true;
+                targetFPS = 60;
+                showFileExtensions = true;
+                autoRefresh = false;
+                showGrid = true;
+                showAxes = true;
+                backgroundColor[0] = backgroundColor[1] = backgroundColor[2] = 0.05f;
+                preserveHierarchy = true;
+                embedTextures = false;
+                compressionLevel = 5;
+                maxCacheSize = 512;
+                threadCount = 4;
+            }
+
+            ImGui::EndChild();
         }
-        
+
         ImGui::Unindent(8.0f);
         ImGui::Spacing();
+        ImGui::PopStyleVar();
     }
 
     void LayoutManager::RenderConsole()
@@ -1575,7 +1633,7 @@ namespace ModernUI
                             {
                                 m_selectedAssets.clear();
                             }
-                            
+
                             auto it = std::find(m_selectedAssets.begin(), m_selectedAssets.end(), asset);
                             if (it != m_selectedAssets.end())
                             {
@@ -1586,7 +1644,13 @@ namespace ModernUI
                                 m_selectedAssets.push_back(asset); // Select
                             }
                         }
-                        
+
+                        // Handle double-click to open in tab (Godot-style)
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                        {
+                            OpenAssetInTab(asset);
+                        }
+
                         // Show tooltip with full path on hover
                         if (ImGui::IsItemHovered())
                         {
@@ -1623,17 +1687,15 @@ namespace ModernUI
         // Add some padding and spacing
         ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(8.0f, 6.0f));
         
-        if (ImGui::BeginTable("AssetTable", 4, 
-                             ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | 
-                             ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerV | 
+        if (ImGui::BeginTable("AssetTable", 2,
+                             ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable |
+                             ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerV |
                              ImGuiTableFlags_RowBg | ImGuiTableFlags_Hideable |
                              ImGuiTableFlags_SizingStretchProp))
         {
-            // Better column setup with more appropriate widths
-            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.5f);
-            ImGui::TableSetupColumn("GUID", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-            ImGui::TableSetupColumn("Container", ImGuiTableColumnFlags_WidthStretch, 0.3f);
+            // Simplified column setup - just type and name for cleaner look
+            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 1.0f);
             
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableHeadersRow();
@@ -1673,16 +1735,16 @@ namespace ModernUI
                     ImGui::PushID(asset);
                     ImGui::TableNextRow();
                     
-                    // Type column with icon and text
+                    // Type column
                     if (ImGui::TableSetColumnIndex(0))
                     {
                         char typeStr[5] = {0};
                         uint32_t assetType = asset->GetAssetType();
                         memcpy(typeStr, &assetType, 4);
-                         for (int i2 = 0; i2 < 4; ++i2) {
-                             if (typeStr[i2] < 32 || typeStr[i2] > 126) typeStr[i2] = '?';
-                         }
-                        ImGui::Text("Type: %s", typeStr);
+                        for (int i2 = 0; i2 < 4; ++i2) {
+                            if (typeStr[i2] < 32 || typeStr[i2] > 126) typeStr[i2] = '?';
+                        }
+                        ImGui::Text("%s", typeStr);
                     }
                     
                     // Name column
@@ -1693,14 +1755,14 @@ namespace ModernUI
                         // Add padding for better visual separation
                         ImGui::AlignTextToFramePadding();
                         
-                        if (ImGui::Selectable(asset->GetAssetName().c_str(), isSelected, 
+                        if (ImGui::Selectable(asset->GetAssetName().c_str(), isSelected,
                                             ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap))
                         {
                             if (!ImGui::GetIO().KeyCtrl)
                             {
                                 m_selectedAssets.clear();
                             }
-                            
+
                             auto it = std::find(m_selectedAssets.begin(), m_selectedAssets.end(), asset);
                             if (it != m_selectedAssets.end())
                             {
@@ -1711,10 +1773,21 @@ namespace ModernUI
                                 m_selectedAssets.push_back(asset);
                             }
                         }
+
+                        // Handle double-click to open in tab (Godot-style)
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                        {
+                            OpenAssetInTab(asset);
+                        }
                         
                         // Context menu for asset
                         if (ImGui::BeginPopupContextItem())
                         {
+                            if (ImGui::MenuItem("Open in Tab"))
+                            {
+                                OpenAssetInTab(asset);
+                            }
+                            ImGui::Separator();
                             if (ImGui::MenuItem("Export Asset"))
                             {
                                 // TODO: Export this asset
@@ -1729,34 +1802,6 @@ namespace ModernUI
                                 ImGui::SetClipboardText(guidStr.c_str());
                             }
                             ImGui::EndPopup();
-                        }
-                    }
-                    
-                    // GUID column
-                    if (ImGui::TableSetColumnIndex(2))
-                    {
-                        ImGui::AlignTextToFramePadding();
-                        ImGui::Text("%016llX", asset->GetAssetGUID());
-                    }
-                    
-                    // Container column
-                    if (ImGui::TableSetColumnIndex(3))
-                    {
-                        ImGui::AlignTextToFramePadding();
-                        std::string containerName = asset->GetContainerFileName();
-                        
-                        // Shorten long container names
-                        if (containerName.length() > 30)
-                        {
-                            containerName = containerName.substr(0, 27) + "...";
-                        }
-                        
-                        ImGui::Text("%s", containerName.c_str());
-                        
-                        // Tooltip with full name
-                        if (ImGui::IsItemHovered())
-                        {
-                            ImGui::SetTooltip("%s", asset->GetContainerFileName().c_str());
                         }
                     }
                     
@@ -1951,7 +1996,7 @@ namespace ModernUI
     void LayoutManager::RenderTextureViewer(CAsset* textureAsset)
     {
         // Dedicated texture viewer panel
-        ImGui::Text("🖼️ Texture Viewer");
+        ImGui::Text("Texture Viewer");
         ImGui::Separator();
         
         try {
@@ -1971,11 +2016,11 @@ namespace ModernUI
             ImGui::BeginGroup();
             {
                 // Asset name
-                ImGui::Text("📄 %s", textureAsset->GetAssetName().c_str());
+                ImGui::Text("%s", textureAsset->GetAssetName().c_str());
                 
                 // Quick info in one line
                 ImGui::SameLine();
-                ImGui::TextDisabled(" • ");
+                ImGui::TextDisabled(" - ");
                 ImGui::SameLine();
                 
                 uint32_t formatId = static_cast<uint32_t>(txtrAsset->imgFormat);
@@ -1991,7 +2036,7 @@ namespace ModernUI
                     default: formatName = std::format("Format {}", formatId); break;
                 }
                 
-                ImGui::Text("%dx%d • %s • %d mips", 
+                ImGui::Text("%dx%d | %s | %d mips", 
                     txtrAsset->width, txtrAsset->height, 
                     formatName.c_str(), txtrAsset->totalMipLevels);
             }
@@ -2111,7 +2156,7 @@ namespace ModernUI
                 ImGui::SetCursorPos(ImVec2(centerPos.x - 100, centerPos.y - 50));
                 
                 ImGui::BeginGroup();
-                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠️ Cannot Display Texture");
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Cannot Display Texture");
                 ImGui::Text("This texture format may not be supported");
                 ImGui::Text("or the texture data may be corrupted.");
                 ImGui::EndGroup();
@@ -2141,7 +2186,8 @@ namespace ModernUI
                 if (assetType == 0x5F6C646D || // '_ldm' (MDL_)
                     assetType == 0x67697261 || // 'arig' (ARIG)
                     assetType == 0x71657361 || // 'aseq' (ASEQ)
-                    assetType == 0x006C646D)   // 'mdl\0' (MDL)
+                    assetType == 0x006C646D || // 'mdl\0' (MDL)
+                    assetType == 0x6C646D72)   // 'rmdl' - Additional model type
                 {
                     hasModelSelected = true;
                     modelAsset = asset;
@@ -2260,9 +2306,9 @@ namespace ModernUI
             bool modelLoaded = (previewDrawData != nullptr);
             
             if (modelLoaded) {
-                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ %s", modelInfo.c_str());
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", modelInfo.c_str());
             } else {
-                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠ %s (Loading...)", modelInfo.c_str());
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "%s (Loading...)", modelInfo.c_str());
             }
             
             if (m_modelViewerState.freecamEnabled) {
@@ -3868,9 +3914,255 @@ void LayoutManager::RenderMaterialSpherePreview(const void* materialData, CAsset
         // Restore original render targets and viewport
         context->OMSetRenderTargets(1, &originalRTV, originalDSV);
         context->RSSetViewports(1, &originalViewport);
-        
+
         if (originalRTV) originalRTV->Release();
         if (originalDSV) originalDSV->Release();
+    }
+
+    // ================================================================================================
+    // Tab Management (Godot-style)
+    // ================================================================================================
+
+    void LayoutManager::OpenAssetInTab(CAsset* asset)
+    {
+        if (!asset) return;
+
+        // Check if asset is already open in a tab
+        for (size_t i = 0; i < m_openTabs.size(); ++i)
+        {
+            if (m_openTabs[i].asset == asset)
+            {
+                SetActiveTab(i);
+                return;
+            }
+        }
+
+        // Determine tab type based on asset type
+        TabType tabType = TabType::Generic;
+        try {
+            uint32_t assetType = asset->GetAssetType();
+
+            // Check for 3D model types (match what RenderModelViewer3D expects)
+            if (assetType == 0x5F6C646D || // '_ldm' (MDL_)
+                assetType == 0x67697261 || // 'arig' (ARIG)
+                assetType == 0x71657361 || // 'aseq' (ASEQ)
+                assetType == 0x006C646D || // 'mdl\0' (MDL)
+                assetType == 0x6C646D72)   // 'rmdl' - Additional model type
+            {
+                tabType = TabType::Model3D;
+            }
+            // Check for texture types: 'rtxt' or 'txtr'
+            else if (assetType == 0x72747874 || assetType == 0x74787472) {
+                tabType = TabType::Texture;
+            }
+            // Check for material type: 'matl'
+            else if (assetType == 0x6C74616D) {
+                tabType = TabType::Material;
+            }
+        } catch (...) {
+            // Default to generic if we can't determine type
+        }
+
+        // Create new tab with just the filename
+        std::string fullPath = asset->GetAssetName();
+        std::string tabName;
+
+        if (!fullPath.empty()) {
+            // Extract filename from full path
+            size_t lastSlash = fullPath.find_last_of("/\\");
+            if (lastSlash != std::string::npos) {
+                tabName = fullPath.substr(lastSlash + 1);
+            } else {
+                tabName = fullPath; // No path separators, use as-is
+            }
+        }
+
+        if (tabName.empty()) {
+            tabName = "Unnamed Asset";
+        }
+
+        m_openTabs.emplace_back(tabName, asset, tabType);
+        size_t newTabIndex = m_openTabs.size() - 1;
+        SetActiveTab(newTabIndex);
+        m_forceSelectTabIndex = newTabIndex; // Force ImGui to select this specific tab on next render
+    }
+
+    void LayoutManager::CloseTab(size_t tabIndex)
+    {
+        if (tabIndex >= m_openTabs.size()) return;
+
+        m_openTabs.erase(m_openTabs.begin() + tabIndex);
+
+        // Adjust active tab index
+        if (m_openTabs.empty()) {
+            m_activeTabIndex = 0;
+        } else if (m_activeTabIndex >= m_openTabs.size()) {
+            m_activeTabIndex = m_activeTabIndex - 1;
+        } else if (tabIndex <= m_activeTabIndex && m_activeTabIndex > 0) {
+            m_activeTabIndex--;
+        }
+    }
+
+    void LayoutManager::SetActiveTab(size_t tabIndex)
+    {
+        if (tabIndex >= m_openTabs.size()) return;
+
+        // Set all tabs to inactive first
+        for (auto& tab : m_openTabs) {
+            tab.isActive = false;
+        }
+
+        // Set the selected tab as active
+        m_openTabs[tabIndex].isActive = true;
+        m_activeTabIndex = tabIndex;
+
+        // Update selected assets to match active tab
+        std::vector<CAsset*> newSelection = { m_openTabs[tabIndex].asset };
+        SetSelectedAssets(newSelection);
+    }
+
+    size_t LayoutManager::GetActiveTabIndex() const
+    {
+        return m_activeTabIndex;
+    }
+
+    void LayoutManager::RenderTabbedCenterPanel()
+    {
+        // Show message if no tabs are open
+        if (m_openTabs.empty())
+        {
+            ImVec2 centerPos = ImVec2(
+                ImGui::GetContentRegionAvail().x * 0.5f,
+                ImGui::GetContentRegionAvail().y * 0.5f
+            );
+            ImGui::SetCursorPos(centerPos);
+            ImGui::PushStyleColor(ImGuiCol_Text, GetSecondaryColor());
+            ImGui::Text("No assets open");
+            ImGui::PopStyleColor();
+
+            ImGui::SetCursorPosY(centerPos.y + 30);
+            ImGui::SetCursorPosX(centerPos.x - 80);
+            ImGui::Text("Double-click an asset to open it in a tab");
+            return;
+        }
+
+        // Render tab bar
+        if (ImGui::BeginTabBar("AssetTabs", ImGuiTabBarFlags_Reorderable | ImGuiTabBarFlags_TabListPopupButton))
+        {
+            for (size_t i = 0; i < m_openTabs.size(); ++i)
+            {
+                OpenTab& tab = m_openTabs[i];
+                bool isOpen = true;
+
+                // Create tab name with close button
+                std::string tabLabel = tab.name;
+
+                // Add type icon
+                switch (tab.type)
+                {
+                    case TabType::Model3D:
+                        tabLabel = "[mdl]" + tabLabel;
+                        break;
+                    case TabType::Texture:
+                        tabLabel = "[txtr]" + tabLabel;
+                        break;
+                    case TabType::Material:
+                        tabLabel = "[mat]" + tabLabel;
+                        break;
+                }
+
+                // Use ImGui flags to set the selected tab
+                ImGuiTabItemFlags flags = ImGuiTabItemFlags_None;
+                if (i == m_forceSelectTabIndex) {
+                    flags = ImGuiTabItemFlags_SetSelected;
+                }
+
+                if (ImGui::BeginTabItem(tabLabel.c_str(), &isOpen, flags))
+                {
+                    if (m_activeTabIndex != i) {
+                        SetActiveTab(i);
+                    }
+
+                    // Render the content for this tab
+                    RenderTabContent(tab);
+
+                    ImGui::EndTabItem();
+                }
+
+                // Handle tab close
+                if (!isOpen) {
+                    CloseTab(i);
+                    break; // Exit loop since we modified the vector
+                }
+            }
+
+            ImGui::EndTabBar();
+        }
+
+        // Reset the force selection index after rendering
+        m_forceSelectTabIndex = SIZE_MAX;
+    }
+
+    void LayoutManager::RenderTabContent(const OpenTab& tab)
+    {
+        if (!tab.asset) {
+            ImGui::Text("Invalid asset");
+            return;
+        }
+
+        // Render content based on tab type
+        switch (tab.type)
+        {
+            case TabType::Model3D:
+                RenderModelViewer3D();
+                break;
+
+            case TabType::Texture:
+                RenderTextureViewer(tab.asset);
+                break;
+
+            case TabType::Material:
+                {
+                    // Temporarily set the asset as selected so RenderMaterialPreview can find it
+                    std::vector<CAsset*> originalSelection = m_selectedAssets;
+                    m_selectedAssets = { tab.asset };
+                    RenderMaterialPreview();
+                    m_selectedAssets = originalSelection;
+                }
+                break;
+
+            case TabType::Generic:
+            default:
+                {
+                    // Show basic asset info
+                    ImGui::Text("Asset: %s", tab.asset->GetAssetName().c_str());
+                    ImGui::Text("Type: 0x%08X", tab.asset->GetAssetType());
+
+                    // Try to show some content if possible
+                    try {
+                        uint32_t assetType = tab.asset->GetAssetType();
+
+                        // Try texture viewer for unknown texture-like assets
+                        if (assetType == 0x72747874 || assetType == 0x74787472) {
+                            RenderTextureViewer(tab.asset);
+                        }
+                        // Try material preview for material-like assets
+                        else if (assetType == 0x6C74616D) {
+                            std::vector<CAsset*> savedSelection = m_selectedAssets;
+                            m_selectedAssets = { tab.asset };
+                            RenderMaterialPreview();
+                            m_selectedAssets = savedSelection;
+                        }
+                        else {
+                            ImGui::Separator();
+                            ImGui::Text("Preview not available for this asset type");
+                        }
+                    } catch (...) {
+                        ImGui::Text("Unable to preview this asset");
+                    }
+                }
+                break;
+        }
     }
 }
 

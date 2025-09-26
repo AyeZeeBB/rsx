@@ -38,10 +38,31 @@ namespace ModernUI
         std::vector<AssetTreeNode> children; // Subdirectories
         bool isExpanded = false;    // Default to collapsed for better performance
         bool isDirectory = true;    // true for directories, false for individual assets
-        
+
         AssetTreeNode() = default;
-        AssetTreeNode(const std::string& n, const std::string& path = "", bool isDir = true) 
+        AssetTreeNode(const std::string& n, const std::string& path = "", bool isDir = true)
             : name(n), fullPath(path), isDirectory(isDir) {}
+    };
+
+    // Tab types for center panel (Godot-style)
+    enum class TabType
+    {
+        Model3D,
+        Texture,
+        Material,
+        Generic
+    };
+
+    // Open tab structure
+    struct OpenTab
+    {
+        std::string name;           // Display name for the tab
+        CAsset* asset;              // Associated asset
+        TabType type;               // Type of viewer to use
+        bool isActive;              // Currently active tab
+
+        OpenTab(const std::string& n, CAsset* a, TabType t)
+            : name(n), asset(a), type(t), isActive(false) {}
     };
 
     // Modern UI Layout Manager
@@ -67,7 +88,13 @@ namespace ModernUI
         
         // Tree view management
         void RefreshAssetTree();
-        
+
+        // Tab management (Godot-style)
+        void OpenAssetInTab(CAsset* asset);
+        void CloseTab(size_t tabIndex);
+        void SetActiveTab(size_t tabIndex);
+        size_t GetActiveTabIndex() const;
+
     private:
         // Panel rendering functions
         void RenderMenuBar();
@@ -80,6 +107,10 @@ namespace ModernUI
         void RenderMaterialPreview();  // New dedicated material sphere preview
         void RenderProperties();
         void RenderConsole();
+
+        // Godot-style tabbed center panel
+        void RenderTabbedCenterPanel();
+        void RenderTabContent(const OpenTab& tab);
         
         // Asset tree functions
         void BuildAssetTree();
@@ -116,6 +147,11 @@ namespace ModernUI
         bool m_showAssetTableView = false;
         bool m_treeNeedsRebuild = true;
         bool m_lastJobActionState = false; // Track PAK loading state
+
+        // Tab management (Godot-style)
+        std::vector<OpenTab> m_openTabs;
+        size_t m_activeTabIndex = 0;
+        size_t m_forceSelectTabIndex = SIZE_MAX; // Index of tab to force select (SIZE_MAX = none)
         
         // 3D Model Viewer State
         struct ModelViewerState {

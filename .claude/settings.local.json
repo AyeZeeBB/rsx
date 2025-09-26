@@ -4,7 +4,8 @@
       "Bash(./build_zstd.bat)",
       "Bash(build_zstd.bat)",
       "Bash(cmd /c:*)",
-      "Bash(msbuild:*)"
+      "Bash(msbuild:*)",
+      "Bash(\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe\" rsx.sln /p:Configuration=Debug /p:Platform=x64)"
     ],
     "deny": [],
     "ask": []
