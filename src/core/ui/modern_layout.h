@@ -155,7 +155,6 @@ namespace ModernUI
         
         // 3D Model Viewer State
         struct ModelViewerState {
-            bool freecamEnabled = false;
             float cameraSpeed = 1.0f;
             bool showWireframe = false;
             bool showLighting = true;

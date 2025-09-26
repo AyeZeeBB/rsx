@@ -2253,7 +2253,7 @@ namespace ModernUI
         ImGui::SameLine();
         
         // Quick controls in header
-        ImGui::Checkbox("Freecam", &m_modelViewerState.freecamEnabled);
+        ImGui::Text("View Controls:");
         ImGui::SameLine();
         
         ImGui::Checkbox("Skybox", &m_modelViewerState.showSkybox);
@@ -2263,7 +2263,7 @@ namespace ModernUI
         ImGui::SameLine();
         ImGui::TextDisabled("(?)");
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Replace all textures with a default white texture\n\nPress 'T' while focused to toggle texture debug info");
+            ImGui::SetTooltip("Replace all textures with a default white texture\n\nPress 'T' while right-clicking in the viewport to toggle texture debug info");
         }
         
         // Second row of controls
@@ -2311,10 +2311,8 @@ namespace ModernUI
                 ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "%s (Loading...)", modelInfo.c_str());
             }
             
-            if (m_modelViewerState.freecamEnabled) {
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), " | WASD: Move | Mouse: Look | Right-click to capture");
-            }
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), " | Right-click + WASD: Move | Right-click + Mouse: Look");
         }
         else
         {
@@ -2339,8 +2337,8 @@ namespace ModernUI
             }
         }
         
-        // Update camera speed for freecam
-        if (m_modelViewerState.freecamEnabled && g_dxHandler) {
+        // Update camera speed
+        if (g_dxHandler) {
             g_PreviewSettings.previewMovementSpeed = m_modelViewerState.cameraSpeed * 50.0f;
         }
         
@@ -2378,32 +2376,33 @@ namespace ModernUI
                 
                 if (isViewportHovered)
                 {
-                    // Handle freecam input here when image is hovered
-                    if (m_modelViewerState.freecamEnabled && g_dxHandler && g_pInput)
+                    // Handle camera input when right mouse button is held
+                    bool rightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+
+                    if (rightMouseDown && g_dxHandler && g_pInput)
                     {
                         CDXCamera* camera = g_dxHandler->GetCamera();
                         float deltaTime = ImGui::GetIO().DeltaTime;
-                        
-                        // WASD movement using ImGui key detection
+
+                        // WASD movement using ImGui key detection (only when right mouse is held)
                         bool wPressed = ImGui::IsKeyDown(ImGuiKey_W);
                         bool sPressed = ImGui::IsKeyDown(ImGuiKey_S);
                         bool aPressed = ImGui::IsKeyDown(ImGuiKey_A);
                         bool dPressed = ImGui::IsKeyDown(ImGuiKey_D);
                         bool spacePressed = ImGui::IsKeyDown(ImGuiKey_Space);
                         bool shiftPressed = ImGui::IsKeyDown(ImGuiKey_LeftShift) || ImGui::IsKeyDown(ImGuiKey_RightShift);
-                        
-                        
+
                         // Manual WASD movement
                         Vector& pos = camera->position;
                         const float moveSpeed = g_PreviewSettings.previewMovementSpeed;
                         const float yaw = camera->rotation.y;
-                        
+
                         // Calculate movement vectors
                         const float x = sin(yaw);
                         const float z = cos(yaw);
                         const float nx = sin(DEG2RAD(90) - yaw);
                         const float nz = cos(DEG2RAD(90) - yaw);
-                        
+
                         // WASD movement
                         if (wPressed)
                         {
@@ -2433,8 +2432,8 @@ namespace ModernUI
                         {
                             pos.y -= moveSpeed * deltaTime;
                         }
-                        
-                        // Mouse look when right-clicking and dragging (simple approach)
+
+                        // Mouse look when right-clicking and dragging
                         if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f))
                         {
                             ImVec2 mouseDelta = ImGui::GetIO().MouseDelta;
@@ -2443,10 +2442,8 @@ namespace ModernUI
                     }
                     else
                     {
-                        // Show help tooltip when freecam is disabled
-                        if (!m_modelViewerState.freecamEnabled) {
-                            ImGui::SetTooltip("Enable Freecam to navigate around the model");
-                        }
+                        // Show help tooltip when not navigating
+                        ImGui::SetTooltip("Hold right-click and use WASD to navigate around the model");
                     }
                 }
             }
