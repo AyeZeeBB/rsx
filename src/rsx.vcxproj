@@ -40,6 +40,7 @@
     <ClInclude Include="core\render.h" />
     <ClInclude Include="core\shaderexp\multishader.h" />
     <ClInclude Include="core\splash.h" />
+    <ClInclude Include="core\ui\modern_layout.h" />
     <ClInclude Include="core\utils\buffermanager.h" />
     <ClInclude Include="core\utils\exportsettings.h" />
     <ClInclude Include="core\utils\fileio.h" />
@@ -145,6 +146,7 @@
     <ClCompile Include="core\render.cpp" />
     <ClCompile Include="core\render\dxutils.cpp" />
     <ClCompile Include="core\splash.cpp" />
+    <ClCompile Include="core\ui\modern_layout.cpp" />
     <ClCompile Include="core\utils\fileio.cpp" />
     <ClCompile Include="core\utils\ramen.cpp" />
     <ClCompile Include="core\utils\utils_general.cpp" />

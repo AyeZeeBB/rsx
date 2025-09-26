@@ -36,9 +36,17 @@ bool CreateD3DBuffer(
         hr = device->CreateBuffer(&desc, NULL, pBuffer);
     }
 
-    assert(SUCCEEDED(hr));
+    // Don't assert on DirectX failures - just return false and let caller handle it
+    if (FAILED(hr))
+    {
+        // Log error code for debugging
+        // HRESULT error codes: https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/dxgi-error
+        printf("CreateD3DBuffer failed with HRESULT: 0x%08X\n", hr);
+        *pBuffer = nullptr;
+        return false;
+    }
 
-    return SUCCEEDED(hr);
+    return true;
 }
 
 CPreviewDrawData::~CPreviewDrawData()

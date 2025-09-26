@@ -13,6 +13,7 @@
 #include <core/input/input.h>
 
 #include <core/filehandling/export.h>
+#include <core/ui/modern_layout.h>
 
 #include <game/rtech/cpakfile.h>
 #include <game/rtech/assets/model.h>
@@ -28,6 +29,12 @@ PreviewSettings_t g_PreviewSettings { .previewCullDistance = PREVIEW_CULL_DEFAUL
 CPreviewDrawData g_currentPreviewDrawData;
 
 std::atomic<bool> inJobAction = false;
+bool g_useModernLayout = true; // Toggle between old and new layout
+
+// Global preview draw data for 3D model rendering
+CDXDrawData* previewDrawData = nullptr;
+// Set to false to use the legacy draggable window layout
+// Set to true to use the modern fixed panel layout
 
 enum AssetColumn_t
 {
@@ -234,18 +241,31 @@ void CreatePakAssetDependenciesTable(CAsset* asset)
     }
 }
 
+void InitializeModernLayout()
+{
+    if (!ModernUI::g_pModernLayout)
+    {
+        ModernUI::g_pModernLayout = new ModernUI::LayoutManager();
+        ModernUI::g_pModernLayout->Initialize();
+    }
+}
+
+void HandleModernRenderFrame()
+{
+    if (!ModernUI::g_pModernLayout)
+    {
+        InitializeModernLayout();
+    }
+
+    // Render the modern layout
+    ModernUI::g_pModernLayout->Render();
+}
+
 void HandleRenderFrame()
 {
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
-
-    // create a docking area across the entire viewport
-    if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DockingEnable)
-    {
-        ImGui::SetNextWindowBgAlpha(0.f);
-        ImGui::DockSpaceOverViewport(0, ImGuiDockNodeFlags_PassthruCentralNode, 0);
-    }
 
     // while ImGui is using keyboard input, we should not accept any keyboard input, but we should also clear all  
     // existing key states, as otherwise we can end up moving forever (until ImGui loses focus) in model preview if
@@ -270,7 +290,33 @@ void HandleRenderFrame()
     static std::vector<CGlobalAssetData::AssetLookup_t> filteredAssets;
     static CAsset* prevRenderInfoAsset = nullptr;
 
-    CDXDrawData* previewDrawData = nullptr;
+    // Choose between modern and legacy layout
+    if (g_useModernLayout)
+    {
+        HandleModernRenderFrame();
+        
+        // For now, we still need the background drawing and progress bar for the modern layout
+        g_pImGuiHandler->HandleProgressBar();
+
+        ImDrawList* bgDrawList = ImGui::GetBackgroundDrawList();
+        if (previewDrawData)
+        {
+            bgDrawList->AddText(
+                ImGui::GetFont(), 15.f,
+                ImVec2(10, 20), 0xFFFFFFFF,
+                std::format("right click to toggle preview mouse control").c_str());
+        }
+    }
+    else
+    {
+        // Legacy layout code below
+
+        // create a docking area across the entire viewport
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DockingEnable)
+        {
+            ImGui::SetNextWindowBgAlpha(0.f);
+            ImGui::DockSpaceOverViewport(0, ImGuiDockNodeFlags_PassthruCentralNode, 0);
+        }
     if (ImGui::BeginMainMenuBar())
     {
 
@@ -774,26 +820,27 @@ void HandleRenderFrame()
         }
     }
 
-    g_pImGuiHandler->HandleProgressBar();
+        g_pImGuiHandler->HandleProgressBar();
 
-    ImDrawList* bgDrawList = ImGui::GetBackgroundDrawList();
-    if (previewDrawData)
-    {
-        //const CDXCamera* camera = g_dxHandler->GetCamera();
-        //bgDrawList->AddText(
-        //    ImGui::GetFont(), 15.f,
-        //    ImVec2(10, 20), 0xFFFFFFFF,
-        //    std::format("pos: {:.3f} {:.3f} {:.3f}\nrot: {:.3f} {:.3f} {:.3f}",
-        //        camera->position.x, camera->position.y, camera->position.z,
-        //        camera->rotation.x, camera->rotation.y, camera->rotation.z
-        //    ).c_str());
-        //bgDrawList->AddText(ImGui::GetFont(), 20.f, ImVec2(10, 50), 0xFF0000FF, previewDrawData->modelName);
+        ImDrawList* bgDrawList = ImGui::GetBackgroundDrawList();
+        if (previewDrawData)
+        {
+            //const CDXCamera* camera = g_dxHandler->GetCamera();
+            //bgDrawList->AddText(
+            //    ImGui::GetFont(), 15.f,
+            //    ImVec2(10, 20), 0xFFFFFFFF,
+            //    std::format("pos: {:.3f} {:.3f} {:.3f}\nrot: {:.3f} {:.3f} {:.3f}",
+            //        camera->position.x, camera->position.y, camera->position.z,
+            //        camera->rotation.x, camera->rotation.y, camera->rotation.z
+            //    ).c_str());
+            //bgDrawList->AddText(ImGui::GetFont(), 20.f, ImVec2(10, 50), 0xFF0000FF, previewDrawData->modelName);
 
-        bgDrawList->AddText(
-            ImGui::GetFont(), 15.f,
-            ImVec2(10, 20), 0xFFFFFFFF,
-            std::format("right click to toggle preview mouse control").c_str());
-    }
+            bgDrawList->AddText(
+                ImGui::GetFont(), 15.f,
+                ImVec2(10, 20), 0xFFFFFFFF,
+                std::format("right click to toggle preview mouse control").c_str());
+        }
+    } // End of legacy layout else block
 
     ImGui::Render();
     if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)

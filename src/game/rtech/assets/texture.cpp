@@ -356,6 +356,10 @@ void PostLoadTextureAsset(CAssetContainer* container, CAsset* asset)
 
 std::shared_ptr<CTexture> CreateTextureFromMip(CPakAsset* const asset, const TextureMip_t* const mip, const DXGI_FORMAT format, const size_t arrayIdx)
 {
+    // Add safety checks
+    if (!asset || !mip || !g_dxHandler)
+        return nullptr;
+
     if (format == DXGI_FORMAT::DXGI_FORMAT_UNKNOWN)
         return nullptr;
 
@@ -366,9 +370,18 @@ std::shared_ptr<CTexture> CreateTextureFromMip(CPakAsset* const asset, const Tex
     if (!mip->isLoaded)
         return nullptr;
 
-    std::unique_ptr<char[]> txtrData = GetTextureDataForMip(asset, mip, format, arrayIdx);
+    try {
+        std::unique_ptr<char[]> txtrData = GetTextureDataForMip(asset, mip, format, arrayIdx);
+        
+        if (!txtrData) {
+            return nullptr;
+        }
 
-    return std::move(g_dxHandler->CreateRenderTexture(txtrData.get(), mip->slicePitch, mip->width, mip->height, format, 1u, 1u));
+        return std::move(g_dxHandler->CreateRenderTexture(txtrData.get(), mip->slicePitch, mip->width, mip->height, format, 1u, 1u));
+    } catch (...) {
+        // Return null if texture creation fails for any reason
+        return nullptr;
+    }
 };
 
 struct TexturePreviewData_t
@@ -611,7 +624,14 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
 
                         if (item->isLoaded)
                         {
-                            selectedMipTexture = CreateTextureFromMip(pakAsset, &txtrAsset->mipArray.at(selectedMip.index), s_PakToDxgiFormat[txtrAsset->imgFormat], selectedArrayIndex);
+                            try {
+                                selectedMipTexture = CreateTextureFromMip(pakAsset, &txtrAsset->mipArray.at(selectedMip.index), s_PakToDxgiFormat[txtrAsset->imgFormat], selectedArrayIndex);
+                                if (!selectedMipTexture) {
+                                    // Texture creation failed - this is not necessarily an error for unsupported formats
+                                }
+                            } catch (...) {
+                                selectedMipTexture.reset();
+                            }
                         }
                         else
                         {
@@ -662,29 +682,37 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
     CTexture* const selectedMipTxtr = selectedMipTexture.get();
     if (selectedMipTxtr)
     {
-        const float aspectRatio = static_cast<float>(selectedMipTxtr->GetWidth()) / selectedMipTxtr->GetHeight();
+        try {
+            const float aspectRatio = static_cast<float>(selectedMipTxtr->GetWidth()) / selectedMipTxtr->GetHeight();
 
-        float imageHeight = std::max(std::clamp(static_cast<float>(selectedMipTxtr->GetHeight()), 0.f, std::max(ImGui::GetContentRegionAvail().y, 1.f)) - 2.5f, 4.f);
-        float imageWidth = imageHeight * aspectRatio;
+            float imageHeight = std::max(std::clamp(static_cast<float>(selectedMipTxtr->GetHeight()), 0.f, std::max(ImGui::GetContentRegionAvail().y, 1.f)) - 2.5f, 4.f);
+            float imageWidth = imageHeight * aspectRatio;
 
-        imageWidth *= textureZoom;
-        imageHeight *= textureZoom;
+            imageWidth *= textureZoom;
+            imageHeight *= textureZoom;
 
-        ImGuiStyle& style = ImGui::GetStyle();
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + style.FramePadding.y);
+            ImGuiStyle& style = ImGui::GetStyle();
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + style.FramePadding.y);
 
-        ImGui::Separator();
-        ImGui::Text("Scale: %.f%%", textureZoom * 100.f);
-        ImGui::SameLine();
-        ImGui::NextColumn();
+            ImGui::Separator();
+            ImGui::Text("Scale: %.f%%", textureZoom * 100.f);
+            ImGui::SameLine();
+            ImGui::NextColumn();
 
-        constexpr const char* const zoomHelpText = "Hold CTRL and scroll to zoom";
-        IMGUI_RIGHT_ALIGN_FOR_TEXT(zoomHelpText);
-        ImGui::TextUnformatted(zoomHelpText);
-        if (ImGui::BeginChild("Texture Preview", ImVec2(0.f, 0.f), true, ImGuiWindowFlags_HorizontalScrollbar)) // [rika]: todo smaller screens will not have the most ideal viewing experience do to the image being squashed
-        {
-            const bool previewHovering = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
-            ImGui::Image(selectedMipTxtr->GetSRV(), ImVec2(imageWidth, imageHeight));
+            constexpr const char* const zoomHelpText = "Hold CTRL and scroll to zoom";
+            IMGUI_RIGHT_ALIGN_FOR_TEXT(zoomHelpText);
+            ImGui::TextUnformatted(zoomHelpText);
+            if (ImGui::BeginChild("Texture Preview", ImVec2(0.f, 0.f), true, ImGuiWindowFlags_HorizontalScrollbar)) // [rika]: todo smaller screens will not have the most ideal viewing experience do to the image being squashed
+            {
+                const bool previewHovering = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+                
+                // Safety check for SRV before rendering
+                void* srv = selectedMipTxtr->GetSRV();
+                if (srv) {
+                    ImGui::Image(srv, ImVec2(imageWidth, imageHeight));
+                } else {
+                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Texture rendering failed");
+                }
             if (previewHovering && ImGui::GetIO().KeyCtrl)
             {
                 const float wheel = ImGui::GetIO().MouseWheel;
@@ -723,19 +751,30 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
             }
         }
         ImGui::EndChild();
+        } catch (...) {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering texture preview");
+        }
     }
     else
     {
-        const TextureMip_t* const mip = &txtrAsset->mipArray.at(selectedMip.index);
-        selectedMipTexture = CreateTextureFromMip(pakAsset, mip, s_PakToDxgiFormat[txtrAsset->imgFormat], selectedArrayIndex);
+        try {
+            const TextureMip_t* const mip = &txtrAsset->mipArray.at(selectedMip.index);
+            selectedMipTexture = CreateTextureFromMip(pakAsset, mip, s_PakToDxgiFormat[txtrAsset->imgFormat], selectedArrayIndex);
+        } catch (...) {
+            selectedMipTexture.reset();
+        }
     }
 
     if (lastSelectedArrayIndex != selectedArrayIndex)
     {
         lastSelectedArrayIndex = selectedArrayIndex;
 
-        const TextureMip_t* const mip = &txtrAsset->mipArray.at(selectedMip.index);
-        selectedMipTexture = CreateTextureFromMip(pakAsset, mip, s_PakToDxgiFormat[txtrAsset->imgFormat], selectedArrayIndex);
+        try {
+            const TextureMip_t* const mip = &txtrAsset->mipArray.at(selectedMip.index);
+            selectedMipTexture = CreateTextureFromMip(pakAsset, mip, s_PakToDxgiFormat[txtrAsset->imgFormat], selectedArrayIndex);
+        } catch (...) {
+            selectedMipTexture.reset();
+        }
     }
 
     return nullptr;
