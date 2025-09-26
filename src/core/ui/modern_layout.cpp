@@ -1845,7 +1845,7 @@ namespace ModernUI
                 return;
             }
             
-            ImGui::Text("📋 Detailed Texture Information");
+            ImGui::Text("Detailed Texture Information");
             ImGui::Separator();
             
             ImGui::Text("Dimensions: %d x %d pixels", txtrAsset->width, txtrAsset->height);
