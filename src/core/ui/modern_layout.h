@@ -4,10 +4,15 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <core/math/vector.h>
+#include <core/math/mathlib.h>
+#include <d3d11.h>
 
 // Forward declarations
 class CAsset;
 class CGlobalAssetData;
+class CDXCamera;
+struct ID3D11DeviceContext;
 
 namespace ModernUI
 {
@@ -17,6 +22,7 @@ namespace ModernUI
         AssetBrowser,
         AssetInspector,
         Viewport3D,
+        ModelViewer3D,      // New dedicated 3D model viewer
         AssetPreview,
         Properties,
         Console
@@ -25,15 +31,16 @@ namespace ModernUI
     // Asset tree node for hierarchical display
     struct AssetTreeNode
     {
-        std::string name;
-        std::string category;
-        std::vector<CAsset*> assets;
-        std::vector<AssetTreeNode> children;
-        bool isExpanded = true;
-        bool isCategory = false;
+        std::string name;           // Display name for this node (e.g., "barriers", "shooting_range_target_02_stand.rmdl")
+        std::string fullPath;       // Full path from root (e.g., "mdl/barriers")
+        std::vector<CAsset*> assets; // Assets directly in this folder (files)
+        std::vector<AssetTreeNode> children; // Subdirectories
+        bool isExpanded = false;    // Default to collapsed for better performance
+        bool isDirectory = true;    // true for directories, false for individual assets
         
         AssetTreeNode() = default;
-        AssetTreeNode(const std::string& n, bool cat = false) : name(n), isCategory(cat) {}
+        AssetTreeNode(const std::string& n, const std::string& path = "", bool isDir = true) 
+            : name(n), fullPath(path), isDirectory(isDir) {}
     };
 
     // Modern UI Layout Manager
@@ -67,6 +74,7 @@ namespace ModernUI
         void RenderAssetBrowser();
         void RenderAssetInspector();
         void RenderViewport3D();
+        void RenderModelViewer3D();    // New dedicated 3D model viewer
         void RenderAssetPreview();
         void RenderProperties();
         void RenderConsole();
@@ -76,6 +84,13 @@ namespace ModernUI
         void RenderAssetTreeNode(AssetTreeNode& node);
         void RenderAssetTable(const std::vector<CAsset*>& assets);
         
+        // 3D Model Viewer render-to-texture functions
+        bool CreateModelViewerRenderTarget(int width, int height);
+        void DestroyModelViewerRenderTarget();
+        void RenderModelToTexture();
+        void ResizeModelViewerRenderTarget(int width, int height);
+        void RenderGridFloor(ID3D11DeviceContext* context, CDXCamera* camera);
+        
         // Safe texture preview
         void RenderSafeTexturePreview(void* pakAsset);
         void RenderMinimalTextureImage(void* pakAsset, void* txtrAsset);
@@ -84,11 +99,36 @@ namespace ModernUI
         void RenderModel3DViewport();
         
         // UI State
-        bool m_panelVisible[6]; // One for each PanelType
+        bool m_panelVisible[7]; // One for each PanelType (updated for ModelViewer3D)
         std::vector<CAsset*> m_selectedAssets;
         AssetTreeNode m_assetTreeRoot;
         bool m_showAssetTreeView = true;
         bool m_showAssetTableView = false;
+        
+        // 3D Model Viewer State
+        struct ModelViewerState {
+            bool freecamEnabled = false;
+            float cameraSpeed = 1.0f;
+            bool showWireframe = false;
+            bool showLighting = true;
+            bool showSkybox = true;
+            bool useDefaultTexture = false;
+            bool showShadows = true;
+            bool showGridFloor = true;
+            bool autoRotate = false;
+            float autoRotateSpeed = 0.5f;
+            Vector cameraPosition = {0, 0, -5};
+            Vector cameraRotation = {0, 0, 0};
+            
+            // Render-to-texture resources
+            ID3D11Texture2D* renderTexture = nullptr;
+            ID3D11RenderTargetView* renderTargetView = nullptr;
+            ID3D11ShaderResourceView* shaderResourceView = nullptr;
+            ID3D11Texture2D* depthTexture = nullptr;
+            ID3D11DepthStencilView* depthStencilView = nullptr;
+            int renderWidth = 800;
+            int renderHeight = 600;
+        } m_modelViewerState;
         
         // Layout settings
         float m_leftPanelWidth = 350.0f;

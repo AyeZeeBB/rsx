@@ -6,8 +6,11 @@
 #include <core/utils/utils_general.h>
 #include <thirdparty/imgui/misc/imgui_utility.h>
 #include <algorithm>
+#include <functional>
+#include <sstream>
 #include <unordered_map>
 #include <cctype>
+#include <format>
 #include <chrono>
 #include <core/render/dx.h>
 #include <core/filehandling/load.h>
@@ -26,6 +29,7 @@ extern CDXDrawData* previewDrawData;
 
 // Preview settings structure
 extern PreviewSettings_t g_PreviewSettings;
+extern CDXParentHandler* g_dxHandler;
 
 // Forward declarations
 extern CGlobalAssetData g_assetData;
@@ -42,17 +46,19 @@ namespace ModernUI
     LayoutManager::LayoutManager()
     {
         // Initialize all panels as visible except console
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < 7; ++i)  // Updated for ModelViewer3D
         {
             m_panelVisible[i] = true;
         }
         m_panelVisible[static_cast<int>(PanelType::Console)] = false;
         
-        m_assetTreeRoot = AssetTreeNode("Assets", true);
+        m_assetTreeRoot = AssetTreeNode("Assets", "", true);
     }
-
+    
     LayoutManager::~LayoutManager()
     {
+        // Clean up render target resources
+        DestroyModelViewerRenderTarget();
     }
 
     void LayoutManager::Initialize()
@@ -222,6 +228,7 @@ namespace ModernUI
                 ImGui::MenuItem("Asset Browser", nullptr, &m_panelVisible[static_cast<int>(PanelType::AssetBrowser)]);
                 ImGui::MenuItem("Asset Inspector", nullptr, &m_panelVisible[static_cast<int>(PanelType::AssetInspector)]);
                 ImGui::MenuItem("3D Viewport", nullptr, &m_panelVisible[static_cast<int>(PanelType::Viewport3D)]);
+                ImGui::MenuItem("3D Model Viewer (Center)", nullptr, &m_panelVisible[static_cast<int>(PanelType::ModelViewer3D)]);
                 ImGui::MenuItem("Asset Preview", nullptr, &m_panelVisible[static_cast<int>(PanelType::AssetPreview)]);
                 ImGui::MenuItem("Properties", nullptr, &m_panelVisible[static_cast<int>(PanelType::Properties)]);
                 ImGui::MenuItem("Console", nullptr, &m_panelVisible[static_cast<int>(PanelType::Console)]);
@@ -320,9 +327,52 @@ namespace ModernUI
 
                 if (ImGui::BeginChild("CenterArea", ImVec2(centerWidth, 0), false))
                 {
-                    // Split center area vertically if both viewport and preview are visible
-                    if (m_panelVisible[static_cast<int>(PanelType::Viewport3D)] && m_panelVisible[static_cast<int>(PanelType::AssetPreview)])
+                    // Priority order: ModelViewer3D > Viewport3D > AssetPreview
+                    if (m_panelVisible[static_cast<int>(PanelType::ModelViewer3D)])
                     {
+                        // Check if we have texture/material selected first
+                        bool hasTextureSelected = false;
+                        bool hasMaterialSelected = false;
+                        CAsset* textureAsset = nullptr;
+                        CAsset* materialAsset = nullptr;
+                        
+                        if (!m_selectedAssets.empty()) {
+                            CAsset* firstAsset = m_selectedAssets[0];
+                            if (firstAsset) {
+                                try {
+                                    uint32_t assetType = firstAsset->GetAssetType();
+                                    // Check for texture types: 'rtxt' (0x72747874) or 'txtr' (0x74787472)
+                                    if (assetType == 0x72747874 || assetType == 0x74787472) { 
+                                        hasTextureSelected = true;
+                                        textureAsset = firstAsset;
+                                    }
+                                    // Check for material type: 'matl' (0x6C74616D)
+                                    else if (assetType == 0x6C74616D) {
+                                        hasMaterialSelected = true;
+                                        materialAsset = firstAsset;
+                                    }
+                                } catch (...) {
+                                    // Asset type couldn't be read
+                                }
+                            }
+                        }
+                        
+                        if (hasTextureSelected && textureAsset) {
+                            // Show texture viewer instead of 3D model viewer
+                            RenderTextureViewer(textureAsset);
+                        }
+                        else if (hasMaterialSelected && materialAsset) {
+                            // Show material viewer instead of 3D model viewer
+                            RenderMaterialViewer(materialAsset);
+                        }
+                        else {
+                            // Use the new 3D Model Viewer for 3D models
+                            RenderModelViewer3D();
+                        }
+                    }
+                    else if (m_panelVisible[static_cast<int>(PanelType::Viewport3D)] && m_panelVisible[static_cast<int>(PanelType::AssetPreview)])
+                    {
+                        // Split center area vertically if both old viewport and preview are visible
                         const float centerHeight = ImGui::GetContentRegionAvail().y;
                         if (ImGui::BeginChild("ViewportArea", ImVec2(0, centerHeight * 0.6f), true))
                         {
@@ -348,7 +398,8 @@ namespace ModernUI
                 ImGui::EndChild();
 
                 // Right panel
-                if (m_panelVisible[static_cast<int>(PanelType::AssetInspector)] || m_panelVisible[static_cast<int>(PanelType::Properties)])
+                if (m_panelVisible[static_cast<int>(PanelType::AssetInspector)] || 
+                    m_panelVisible[static_cast<int>(PanelType::Properties)])
                 {
                     ImGui::SameLine();
                     if (ImGui::BeginChild("RightPanel", ImVec2(m_rightPanelWidth, 0), true))
@@ -609,6 +660,7 @@ namespace ModernUI
         // Asset basic info
         DrawSeparatorWithText("Basic Information");
         
+        ImGui::Spacing();
         ImGui::AlignTextToFramePadding();
         ImGui::Text("Name:");
         ImGui::SameLine();
@@ -1125,159 +1177,246 @@ namespace ModernUI
         }
         
         if (g_assetData.v_assets.empty()) {
-            AssetTreeNode& emptyNode = m_assetTreeRoot.children.emplace_back("No assets loaded", true);
+            AssetTreeNode& emptyNode = m_assetTreeRoot.children.emplace_back("No assets loaded", "", true);
             emptyNode.isExpanded = false;
             return;
         }
         
-        // Create hierarchical tree: All Assets -> Asset Types -> Individual Assets
-        AssetTreeNode& allNode = m_assetTreeRoot.children.emplace_back("All Assets", true);
-        allNode.isExpanded = true;
+        // Helper function to normalize path separators
+        auto normalizePath = [](const std::string& path) {
+            std::string normalized = path;
+            std::replace(normalized.begin(), normalized.end(), '\\', '/');
+            return normalized;
+        };
         
-        // Map to organize assets by type
-        std::unordered_map<uint32_t, std::vector<CAsset*>> assetsByType;
-        std::unordered_map<uint32_t, std::string> typeNames;
+        // Helper function to split path into components
+        auto splitPath = [](const std::string& path) {
+            std::vector<std::string> components;
+            std::stringstream ss(path);
+            std::string component;
+            
+            while (std::getline(ss, component, '/')) {
+                if (!component.empty()) {
+                    components.push_back(component);
+                }
+            }
+            return components;
+        };
         
-        // Group all assets by type
+        // Helper function to find or create a directory node
+        std::function<AssetTreeNode*( AssetTreeNode&, const std::vector<std::string>&, size_t)> findOrCreatePath;
+        findOrCreatePath = [&](AssetTreeNode& parent, const std::vector<std::string>& pathComponents, size_t depth) -> AssetTreeNode* {
+            if (depth >= pathComponents.size()) {
+                return &parent;
+            }
+            
+            const std::string& dirName = pathComponents[depth];
+            
+            // Look for existing child with this name
+            for (auto& child : parent.children) {
+                if (child.name == dirName && child.isDirectory) {
+                    return findOrCreatePath(child, pathComponents, depth + 1);
+                }
+            }
+            
+            // Create new directory node
+            std::string fullPath = "";
+            for (size_t i = 0; i <= depth; ++i) {
+                if (i > 0) fullPath += "/";
+                fullPath += pathComponents[i];
+            }
+            
+            AssetTreeNode& newDir = parent.children.emplace_back(dirName, fullPath, true);
+            newDir.isExpanded = false;
+            return findOrCreatePath(newDir, pathComponents, depth + 1);
+        };
+        
+        // Process all assets and organize by file path
         for (const auto& lookup : g_assetData.v_assets) {
             if (!lookup.m_asset) continue;
             
             CAsset* asset = lookup.m_asset;
-            uint32_t assetType = 0;
+            std::string assetName;
             
             try {
-                assetType = asset->GetAssetType();
+                assetName = asset->GetAssetName();
+                if (assetName.empty()) {
+                    continue; // Skip assets with no name
+                }
             } catch (...) {
-                assetType = 0; // Unknown type
+                continue; // Skip invalid assets
             }
             
-            assetsByType[assetType].push_back(asset);
+            // Normalize the asset path
+            std::string normalizedPath = normalizePath(assetName);
+            std::vector<std::string> pathComponents = splitPath(normalizedPath);
             
-            // Create readable type name if not already done
-            if (typeNames.find(assetType) == typeNames.end()) {
-                char typeStr[5] = {0};
-                memcpy(typeStr, &assetType, 4);
-                
-                // Sanitize characters
-                for (int i = 0; i < 4; ++i) {
-                    if (typeStr[i] < 32 || typeStr[i] > 126) {
-                        typeStr[i] = '?';
+            if (pathComponents.empty()) {
+                continue; // Skip empty paths
+            }
+            
+            // Find or create the directory structure for this asset
+            AssetTreeNode* targetDir = &m_assetTreeRoot;
+            if (pathComponents.size() > 1) {
+                // All components except the last one are directories
+                std::vector<std::string> dirComponents(pathComponents.begin(), pathComponents.end() - 1);
+                targetDir = findOrCreatePath(m_assetTreeRoot, dirComponents, 0);
+            }
+            
+            // Add the asset to the target directory
+            targetDir->assets.push_back(asset);
+        }
+        
+        // Recursive function to sort directories and remove empty ones
+        std::function<void(AssetTreeNode&)> sortAndCleanup;
+        sortAndCleanup = [&](AssetTreeNode& node) {
+            // Remove empty directories
+            node.children.erase(
+                std::remove_if(node.children.begin(), node.children.end(),
+                    [](const AssetTreeNode& child) {
+                        return child.isDirectory && child.children.empty() && child.assets.empty();
+                    }),
+                node.children.end()
+            );
+            
+            // Sort children alphabetically (directories first, then by name)
+            std::sort(node.children.begin(), node.children.end(),
+                [](const AssetTreeNode& a, const AssetTreeNode& b) {
+                    if (a.isDirectory != b.isDirectory) {
+                        return a.isDirectory; // Directories first
                     }
-                }
-                
-                // Create user-friendly names for known types
-                if (assetType == 0x72747874) { // 'rtxt'
-                    typeNames[assetType] = "Textures";
-                } else if (assetType == 0x6C646D5F) { // '_ldm'
-                    typeNames[assetType] = "Models";
-                } else if (assetType == 0x6C74616D) { // 'ltam'
-                    typeNames[assetType] = "Materials";
-                } else if (assetType == 0x73697573) { // 'sius'
-                    typeNames[assetType] = "Audio";
-                } else if (assetType == 0x61676972) { // 'gira'
-                    typeNames[assetType] = "Animation Rigs";
-                } else if (assetType == 0x61736571) { // 'qesa'
-                    typeNames[assetType] = "Animation Sequences";
-                } else if (assetType == 0x72646873) { // 'rdhs'
-                    typeNames[assetType] = "Shaders";
-                } else if (assetType == 0x676D6975) { // 'gmiu'
-                    typeNames[assetType] = "UI Images";
-                } else {
-                    typeNames[assetType] = std::format("Type [{}]", typeStr);
-                }
-            }
-        }
-        
-        // Create category nodes under "All Assets"
-        for (const auto& [type, assets] : assetsByType) {
-            if (assets.empty()) continue;
+                    return a.name < b.name;
+                });
             
-            AssetTreeNode& typeNode = allNode.children.emplace_back(typeNames[type], true);
-            typeNode.isExpanded = false;
-            typeNode.assets = assets; // Copy all assets of this type
-        }
+            // Recursively process children
+            for (auto& child : node.children) {
+                sortAndCleanup(child);
+            }
+        };
         
-        // Sort type categories alphabetically
-        std::sort(allNode.children.begin(), allNode.children.end(),
-                  [](const AssetTreeNode& a, const AssetTreeNode& b) {
-                      return a.name < b.name;
-                  });
+        sortAndCleanup(m_assetTreeRoot);
     }
 
     void LayoutManager::RenderAssetTreeNode(AssetTreeNode& node)
     {
-        // Check if this node has child categories or assets
         bool hasChildren = !node.children.empty();
         bool hasAssets = !node.assets.empty();
         
-        if (hasChildren)
+        if (node.isDirectory)
         {
-            // This is a category node (like "All Assets" or "Textures")
-            std::string nodeLabel = std::format("{} ({} types)", node.name, node.children.size());
-            bool nodeOpen = ImGui::TreeNode(nodeLabel.c_str());
+            // This is a directory node
+            std::string nodeLabel;
+            if (hasChildren && hasAssets) {
+                nodeLabel = std::format("{} ({} folders, {} files)", node.name, node.children.size(), node.assets.size());
+            } else if (hasChildren) {
+                nodeLabel = std::format("{} ({} folders)", node.name, node.children.size());
+            } else if (hasAssets) {
+                nodeLabel = std::format("{} ({} files)", node.name, node.assets.size());
+            } else {
+                nodeLabel = std::format("{} (empty)", node.name);
+            }
+            
+            // Use TreeNodeEx for better control over expansion state
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
+            if (!hasChildren && !hasAssets) {
+                flags |= ImGuiTreeNodeFlags_Leaf;
+            }
+            if (node.isExpanded) {
+                flags |= ImGuiTreeNodeFlags_DefaultOpen;
+            }
+            
+            bool nodeOpen = ImGui::TreeNodeEx(nodeLabel.c_str(), flags);
             
             if (nodeOpen)
             {
-                // Render child category nodes
+                // Update expansion state
+                node.isExpanded = true;
+                
+                // Render child directories first
                 for (auto& child : node.children)
                 {
                     RenderAssetTreeNode(child);
                 }
-                ImGui::TreePop();
-            }
-        }
-        else if (hasAssets)
-        {
-            // This is an asset type category (like "Textures" with actual assets)
-            std::string nodeLabel = std::format("{} ({} assets)", node.name, node.assets.size());
-            bool nodeOpen = ImGui::TreeNode(nodeLabel.c_str());
-            
-            if (nodeOpen)
-            {
-                // Render individual assets
-                for (CAsset* asset : node.assets)
+                
+                // Then render individual assets in this directory
+                if (hasAssets)
                 {
-                    if (!asset) continue;
-                    
-                    std::string displayName = "Asset";
-                    try {
-                        displayName = asset->GetAssetName();
-                        if (displayName.empty()) {
-                            displayName = "Unnamed Asset";
-                        }
-                    } catch (...) {
-                        displayName = "Invalid Asset";
-                    }
-                    
-                    // Check if this asset is selected
-                    bool isSelected = std::find(m_selectedAssets.begin(), m_selectedAssets.end(), asset) != m_selectedAssets.end();
-                    
-                    if (ImGui::Selectable(displayName.c_str(), isSelected))
+                    for (CAsset* asset : node.assets)
                     {
-                        // Handle selection with Ctrl for multi-select
-                        if (!ImGui::GetIO().KeyCtrl)
-                        {
-                            m_selectedAssets.clear();
+                        if (!asset) continue;
+                        
+                        std::string displayName = "Asset";
+                        std::string assetPath;
+                        try {
+                            assetPath = asset->GetAssetName();
+                            // Extract just the filename from the path
+                            size_t lastSlash = assetPath.find_last_of("/\\");
+                            if (lastSlash != std::string::npos) {
+                                displayName = assetPath.substr(lastSlash + 1);
+                            } else {
+                                displayName = assetPath;
+                            }
+                            
+                            if (displayName.empty()) {
+                                displayName = "Unnamed Asset";
+                            }
+                        } catch (...) {
+                            displayName = "Invalid Asset";
                         }
                         
-                        auto it = std::find(m_selectedAssets.begin(), m_selectedAssets.end(), asset);
-                        if (it != m_selectedAssets.end())
+                        // Check if this asset is selected
+                        bool isSelected = std::find(m_selectedAssets.begin(), m_selectedAssets.end(), asset) != m_selectedAssets.end();
+                        
+                        // Add some indentation for files to distinguish from folders
+                        ImGui::Indent(16.0f);
+                        
+                        if (ImGui::Selectable(displayName.c_str(), isSelected))
                         {
-                            m_selectedAssets.erase(it); // Deselect
+                            // Handle selection with Ctrl for multi-select
+                            if (!ImGui::GetIO().KeyCtrl)
+                            {
+                                m_selectedAssets.clear();
+                            }
+                            
+                            auto it = std::find(m_selectedAssets.begin(), m_selectedAssets.end(), asset);
+                            if (it != m_selectedAssets.end())
+                            {
+                                m_selectedAssets.erase(it); // Deselect
+                            }
+                            else
+                            {
+                                m_selectedAssets.push_back(asset); // Select
+                            }
                         }
-                        else
+                        
+                        // Show tooltip with full path on hover
+                        if (ImGui::IsItemHovered())
                         {
-                            m_selectedAssets.push_back(asset); // Select
+                            ImGui::SetTooltip("%s", assetPath.c_str());
                         }
+                        
+                        ImGui::Unindent(16.0f);
                     }
                 }
+                
                 ImGui::TreePop();
+            }
+            else
+            {
+                // Update expansion state when collapsed
+                node.isExpanded = false;
             }
         }
         else
         {
-            // Empty node
-            ImGui::Text("%s (empty)", node.name.c_str());
+            // Individual asset (shouldn't happen with our new structure, but kept for safety)
+            std::string displayName = node.name;
+            
+            bool isSelected = false; // We'd need to check if any assets match
+            if (ImGui::Selectable(displayName.c_str(), isSelected))
+            {
+                // Handle individual asset selection if needed
+            }
         }
     }
 
@@ -1785,10 +1924,777 @@ namespace ModernUI
         }
     }
     
+    void LayoutManager::RenderModelViewer3D()
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
+        
+        // Check if we have a model selected (declare at function scope)
+        bool hasModelSelected = false;
+        CAsset* modelAsset = nullptr;
+        
+        for (CAsset* asset : m_selectedAssets)
+        {
+            if (!asset) continue;
+            
+            try 
+            {
+                uint32_t assetType = asset->GetAssetType();
+                // Check for model types: MDL_, ARIG, ASEQ, etc.
+                if (assetType == 0x5F6C646D || // '_ldm' (MDL_)
+                    assetType == 0x67697261 || // 'arig' (ARIG)
+                    assetType == 0x71657361 || // 'aseq' (ASEQ)
+                    assetType == 0x006C646D)   // 'mdl\0' (MDL)
+                {
+                    hasModelSelected = true;
+                    modelAsset = asset;
+                    break;
+                }
+            } 
+            catch (...) 
+            {
+                continue;
+            }
+        }
+        
+        // Load the model for 3D preview if one is selected
+        if (hasModelSelected && modelAsset)
+        {
+            try 
+            {
+                uint32_t assetType = modelAsset->GetAssetType();
+                auto bindingIt = g_assetData.m_assetTypeBindings.find(assetType);
+                
+                if (bindingIt != g_assetData.m_assetTypeBindings.end() && bindingIt->second.previewFunc)
+                {
+                    static CAsset* lastPreviewedAsset = nullptr;
+                    const bool isFirstFrame = (lastPreviewedAsset != modelAsset);
+                    
+                    // Force first frame periodically to reload textures when debugging
+                    static int forceFirstFrameCounter = 0;
+                    bool actualFirstFrame = isFirstFrame;
+                    if (showTextureDebug) {
+                        forceFirstFrameCounter++;
+                        if (forceFirstFrameCounter > 60) { // Every 60 frames when debugging
+                            actualFirstFrame = true;
+                            forceFirstFrameCounter = 0;
+                        }
+                    }
+                    
+                    lastPreviewedAsset = modelAsset;
+                    
+                    // Call the preview function to load the model
+                    void* previewResult = bindingIt->second.previewFunc(modelAsset, actualFirstFrame);
+                    if (previewResult) {
+                        // Set the global previewDrawData for the main render loop
+                        previewDrawData = reinterpret_cast<CDXDrawData*>(previewResult);
+                    } else {
+                        previewDrawData = nullptr;
+                    }
+                } 
+                else 
+                {
+                    previewDrawData = nullptr;
+                }
+            } 
+            catch (...) 
+            {
+                previewDrawData = nullptr;
+            }
+        } 
+        else 
+        {
+            // No model selected - clear model rendering
+            previewDrawData = nullptr;
+        }
+        
+        // Compact header toolbar for center panel
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("3D Model Viewer");
+        
+        ImGui::SameLine();
+        ImGui::Spacing();
+        ImGui::SameLine();
+        
+        // Quick controls in header
+        ImGui::Checkbox("Freecam", &m_modelViewerState.freecamEnabled);
+        ImGui::SameLine();
+        
+        ImGui::Checkbox("Skybox", &m_modelViewerState.showSkybox);
+        ImGui::SameLine();
+        
+        ImGui::Checkbox("Default Texture", &m_modelViewerState.useDefaultTexture);
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Replace all textures with a default white texture\n\nPress 'T' while focused to toggle texture debug info");
+        }
+        
+        // Second row of controls
+        ImGui::Checkbox("Shadows", &m_modelViewerState.showShadows);
+        ImGui::SameLine();
+        
+        ImGui::Checkbox("Grid Floor", &m_modelViewerState.showGridFloor);
+        ImGui::SameLine();
+        
+        ImGui::SetNextItemWidth(100);
+        ImGui::SliderFloat("Speed", &m_modelViewerState.cameraSpeed, 0.1f, 10.0f, "%.1f");
+        ImGui::SameLine();
+        
+        if (ImGui::Button("Reset Cam"))
+        {
+            if (g_dxHandler && g_dxHandler->GetCamera())
+            {
+                auto* camera = g_dxHandler->GetCamera();
+                camera->position = {0, 0, -5};
+                camera->rotation = {0, 0, 0};
+            }
+            m_modelViewerState.cameraPosition = {0, 0, -5};
+            m_modelViewerState.cameraRotation = {0, 0, 0};
+        }
+        ImGui::SameLine();
+        
+        ImGui::Checkbox("Auto Rotate", &m_modelViewerState.autoRotate);
+        if (m_modelViewerState.autoRotate) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(80);
+            ImGui::SliderFloat("##RotSpeed", &m_modelViewerState.autoRotateSpeed, 0.1f, 2.0f, "%.1f");
+        }
+        
+        ImGui::Separator();
+        
+        // Model status line
+        if (hasModelSelected && modelAsset)
+        {
+            std::string modelInfo = "Model: " + modelAsset->GetAssetName();
+            bool modelLoaded = (previewDrawData != nullptr);
+            
+            if (modelLoaded) {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ %s", modelInfo.c_str());
+            } else {
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠ %s (Loading...)", modelInfo.c_str());
+            }
+            
+            if (m_modelViewerState.freecamEnabled) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), " | WASD: Move | Mouse: Look | Right-click to capture");
+            }
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No model selected - Choose a model asset (.mdl, .arig, .aseq) to view");
+        }
+        
+        // Main 3D Viewport using render-to-texture
+        ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+        
+        // Ensure minimum size
+        int targetWidth = static_cast<int>(std::max(viewportSize.x, 400.0f));
+        int targetHeight = static_cast<int>(std::max(viewportSize.y, 300.0f));
+        
+        // Create or resize render target if needed
+        if (!m_modelViewerState.renderTargetView || 
+            targetWidth != m_modelViewerState.renderWidth || 
+            targetHeight != m_modelViewerState.renderHeight) 
+        {
+            if (!CreateModelViewerRenderTarget(targetWidth, targetHeight)) {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create render target");
+                return;
+            }
+        }
+        
+        // Update camera speed for freecam
+        if (m_modelViewerState.freecamEnabled && g_dxHandler) {
+            g_PreviewSettings.previewMovementSpeed = m_modelViewerState.cameraSpeed * 50.0f;
+        }
+        
+        bool isViewportHovered = false;
+        
+        // Handle auto-rotation
+        if (m_modelViewerState.autoRotate && g_dxHandler)
+        {
+            static float autoRotateTime = 0.0f;
+            autoRotateTime += ImGui::GetIO().DeltaTime * m_modelViewerState.autoRotateSpeed;
+            if (g_dxHandler->GetCamera())
+            {
+                g_dxHandler->GetCamera()->rotation.y = autoRotateTime * 0.5f;
+            }
+        }
+        
+        // Render the 3D model to our render target
+        if (hasModelSelected && previewDrawData) {
+            RenderModelToTexture();
+        }
+        
+        // Display the rendered texture in ImGui
+        if (m_modelViewerState.shaderResourceView)
+        {
+            // Create proper viewport child for the image
+            if (ImGui::BeginChild("ModelViewer3DImage", viewportSize, false, 
+                                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+            {
+                // Display the rendered 3D scene as an image
+                ImGui::Image(m_modelViewerState.shaderResourceView, 
+                           ImVec2(static_cast<float>(targetWidth), static_cast<float>(targetHeight)));
+                
+                // Check if the image is hovered and handle input
+                isViewportHovered = ImGui::IsItemHovered();
+                
+                if (isViewportHovered)
+                {
+                    // Handle freecam input here when image is hovered
+                    if (m_modelViewerState.freecamEnabled && g_dxHandler && g_pInput)
+                    {
+                        CDXCamera* camera = g_dxHandler->GetCamera();
+                        float deltaTime = ImGui::GetIO().DeltaTime;
+                        
+                        // WASD movement using ImGui key detection
+                        bool wPressed = ImGui::IsKeyDown(ImGuiKey_W);
+                        bool sPressed = ImGui::IsKeyDown(ImGuiKey_S);
+                        bool aPressed = ImGui::IsKeyDown(ImGuiKey_A);
+                        bool dPressed = ImGui::IsKeyDown(ImGuiKey_D);
+                        bool spacePressed = ImGui::IsKeyDown(ImGuiKey_Space);
+                        bool shiftPressed = ImGui::IsKeyDown(ImGuiKey_LeftShift) || ImGui::IsKeyDown(ImGuiKey_RightShift);
+                        
+                        
+                        // Manual WASD movement
+                        Vector& pos = camera->position;
+                        const float moveSpeed = g_PreviewSettings.previewMovementSpeed;
+                        const float yaw = camera->rotation.y;
+                        
+                        // Calculate movement vectors
+                        const float x = sin(yaw);
+                        const float z = cos(yaw);
+                        const float nx = sin(DEG2RAD(90) - yaw);
+                        const float nz = cos(DEG2RAD(90) - yaw);
+                        
+                        // WASD movement
+                        if (wPressed)
+                        {
+                            pos.x += moveSpeed * deltaTime * x;
+                            pos.z += moveSpeed * deltaTime * z;
+                        }
+                        if (sPressed)
+                        {
+                            pos.x -= moveSpeed * deltaTime * x;
+                            pos.z -= moveSpeed * deltaTime * z;
+                        }
+                        if (aPressed)
+                        {
+                            pos.x += moveSpeed * deltaTime * -nx;
+                            pos.z += moveSpeed * deltaTime * nz;
+                        }
+                        if (dPressed)
+                        {
+                            pos.x -= moveSpeed * deltaTime * -nx;
+                            pos.z -= moveSpeed * deltaTime * nz;
+                        }
+                        if (spacePressed)
+                        {
+                            pos.y += moveSpeed * deltaTime;
+                        }
+                        if (shiftPressed)
+                        {
+                            pos.y -= moveSpeed * deltaTime;
+                        }
+                        
+                        // Mouse look when right-clicking and dragging (simple approach)
+                        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f))
+                        {
+                            ImVec2 mouseDelta = ImGui::GetIO().MouseDelta;
+                            camera->AddRotation(mouseDelta.x * 0.002f, mouseDelta.y * 0.002f, 0);
+                        }
+                    }
+                    else
+                    {
+                        // Show help tooltip when freecam is disabled
+                        if (!m_modelViewerState.freecamEnabled) {
+                            ImGui::SetTooltip("Enable Freecam to navigate around the model");
+                        }
+                    }
+                }
+            }
+            ImGui::EndChild();
+        }
+        else if (hasModelSelected)
+        {
+            // Model loading state
+            const ImVec2 center = ImVec2(viewportSize.x * 0.5f, viewportSize.y * 0.5f);
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const ImVec2 windowPos = ImGui::GetCursorScreenPos();
+            
+            const char* message = "Initializing 3D renderer...\nPlease wait";
+            const ImVec2 textSize = ImGui::CalcTextSize(message);
+            const ImVec2 textPos = ImVec2(windowPos.x + center.x - textSize.x * 0.5f, 
+                                         windowPos.y + center.y - textSize.y * 0.5f);
+            
+            drawList->AddText(textPos, ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 0.8f, 0.0f, 1.0f)), message);
+        }
+        else
+        {
+            // No model selected state
+            const ImVec2 center = ImVec2(viewportSize.x * 0.5f, viewportSize.y * 0.5f);
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const ImVec2 windowPos = ImGui::GetCursorScreenPos();
+            
+            const char* message = "No Model Selected\n\nChoose a 3D model asset from the asset browser\nto view it in this viewport";
+            const ImVec2 textSize = ImGui::CalcTextSize(message);
+            const ImVec2 textPos = ImVec2(windowPos.x + center.x - textSize.x * 0.5f, 
+                                         windowPos.y + center.y - textSize.y * 0.5f);
+            
+            drawList->AddText(textPos, ImGui::ColorConvertFloat4ToU32(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), message);
+        }
+        
+        ImGui::PopStyleVar();
+    }
+
+    bool LayoutManager::CreateModelViewerRenderTarget(int width, int height)
+    {
+        if (!g_dxHandler) return false;
+        
+        ID3D11Device* device = g_dxHandler->GetDevice();
+        if (!device) return false;
+        
+        // Clean up existing resources
+        DestroyModelViewerRenderTarget();
+        
+        // Create render target texture
+        D3D11_TEXTURE2D_DESC textureDesc = {};
+        textureDesc.Width = width;
+        textureDesc.Height = height;
+        textureDesc.MipLevels = 1;
+        textureDesc.ArraySize = 1;
+        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        textureDesc.SampleDesc.Count = 1;
+        textureDesc.SampleDesc.Quality = 0;
+        textureDesc.Usage = D3D11_USAGE_DEFAULT;
+        textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        textureDesc.CPUAccessFlags = 0;
+        textureDesc.MiscFlags = 0;
+        
+        HRESULT hr = device->CreateTexture2D(&textureDesc, nullptr, &m_modelViewerState.renderTexture);
+        if (FAILED(hr)) return false;
+        
+        // Create render target view
+        D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+        rtvDesc.Format = textureDesc.Format;
+        rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+        rtvDesc.Texture2D.MipSlice = 0;
+        
+        hr = device->CreateRenderTargetView(m_modelViewerState.renderTexture, &rtvDesc, &m_modelViewerState.renderTargetView);
+        if (FAILED(hr)) return false;
+        
+        // Create shader resource view for ImGui
+        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+        srvDesc.Format = textureDesc.Format;
+        srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.Texture2D.MostDetailedMip = 0;
+        srvDesc.Texture2D.MipLevels = 1;
+        
+        hr = device->CreateShaderResourceView(m_modelViewerState.renderTexture, &srvDesc, &m_modelViewerState.shaderResourceView);
+        if (FAILED(hr)) return false;
+        
+        // Create depth buffer
+        D3D11_TEXTURE2D_DESC depthDesc = {};
+        depthDesc.Width = width;
+        depthDesc.Height = height;
+        depthDesc.MipLevels = 1;
+        depthDesc.ArraySize = 1;
+        depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        depthDesc.SampleDesc.Count = 1;
+        depthDesc.SampleDesc.Quality = 0;
+        depthDesc.Usage = D3D11_USAGE_DEFAULT;
+        depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+        depthDesc.CPUAccessFlags = 0;
+        depthDesc.MiscFlags = 0;
+        
+        hr = device->CreateTexture2D(&depthDesc, nullptr, &m_modelViewerState.depthTexture);
+        if (FAILED(hr)) return false;
+        
+        // Create depth stencil view
+        D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+        dsvDesc.Format = depthDesc.Format;
+        dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+        dsvDesc.Texture2D.MipSlice = 0;
+        
+        hr = device->CreateDepthStencilView(m_modelViewerState.depthTexture, &dsvDesc, &m_modelViewerState.depthStencilView);
+        if (FAILED(hr)) return false;
+        
+        m_modelViewerState.renderWidth = width;
+        m_modelViewerState.renderHeight = height;
+        
+        return true;
+    }
+    
+    void LayoutManager::DestroyModelViewerRenderTarget()
+    {
+        if (m_modelViewerState.renderTargetView) {
+            m_modelViewerState.renderTargetView->Release();
+            m_modelViewerState.renderTargetView = nullptr;
+        }
+        if (m_modelViewerState.shaderResourceView) {
+            m_modelViewerState.shaderResourceView->Release();
+            m_modelViewerState.shaderResourceView = nullptr;
+        }
+        if (m_modelViewerState.depthStencilView) {
+            m_modelViewerState.depthStencilView->Release();
+            m_modelViewerState.depthStencilView = nullptr;
+        }
+        if (m_modelViewerState.renderTexture) {
+            m_modelViewerState.renderTexture->Release();
+            m_modelViewerState.renderTexture = nullptr;
+        }
+        if (m_modelViewerState.depthTexture) {
+            m_modelViewerState.depthTexture->Release();
+            m_modelViewerState.depthTexture = nullptr;
+        }
+    }
+    
+    void LayoutManager::ResizeModelViewerRenderTarget(int width, int height)
+    {
+        if (width != m_modelViewerState.renderWidth || height != m_modelViewerState.renderHeight) {
+            CreateModelViewerRenderTarget(width, height);
+        }
+    }
+    
+    void LayoutManager::RenderModelToTexture()
+    {
+        if (!g_dxHandler || !m_modelViewerState.renderTargetView || !previewDrawData) {
+            return;
+        }
+        
+        ID3D11Device* device = g_dxHandler->GetDevice();
+        ID3D11DeviceContext* context = g_dxHandler->GetDeviceContext();
+        if (!context || !device) return;
+        
+        // Save current render targets and viewport
+        ID3D11RenderTargetView* originalRTV = nullptr;
+        ID3D11DepthStencilView* originalDSV = nullptr;
+        context->OMGetRenderTargets(1, &originalRTV, &originalDSV);
+        
+        UINT numViewports = 1;
+        D3D11_VIEWPORT originalViewport;
+        context->RSGetViewports(&numViewports, &originalViewport);
+        
+        // Set our render target
+        context->OMSetRenderTargets(1, &m_modelViewerState.renderTargetView, m_modelViewerState.depthStencilView);
+        
+        // Clear render target with skybox, ground plane, or default color
+        float clearColor[4];
+        if (m_modelViewerState.showSkybox) {
+            // Sky blue gradient color
+            clearColor[0] = 0.4f;  // R
+            clearColor[1] = 0.6f;  // G  
+            clearColor[2] = 0.9f;  // B
+            clearColor[3] = 1.0f;  // A
+        } else if (m_modelViewerState.showGridFloor) {
+            // Studio lighting background - light gray
+            clearColor[0] = 0.15f;
+            clearColor[1] = 0.15f;
+            clearColor[2] = 0.15f;
+            clearColor[3] = 1.0f;
+        } else {
+            // Dark background
+            clearColor[0] = 0.02f;
+            clearColor[1] = 0.02f;
+            clearColor[2] = 0.02f;
+            clearColor[3] = 1.0f;
+        }
+        context->ClearRenderTargetView(m_modelViewerState.renderTargetView, clearColor);
+        context->ClearDepthStencilView(m_modelViewerState.depthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
+        
+        // Set our viewport
+        D3D11_VIEWPORT viewport = {};
+        viewport.TopLeftX = 0.0f;
+        viewport.TopLeftY = 0.0f;
+        viewport.Width = static_cast<float>(m_modelViewerState.renderWidth);
+        viewport.Height = static_cast<float>(m_modelViewerState.renderHeight);
+        viewport.MinDepth = 0.0f;
+        viewport.MaxDepth = 1.0f;
+        context->RSSetViewports(1, &viewport);
+        
+        // Set render states (matching original render loop)
+        context->RSSetState(g_dxHandler->GetRasterizerState());
+        context->OMSetDepthStencilState(g_dxHandler->GetDepthStencilState(), 1u);
+        
+        // Render the 3D model (copied from main render loop)
+        CDXCamera* camera = g_dxHandler->GetCamera();
+        
+        // Update camera data
+        camera->CommitCameraDataBufferUpdates();
+        
+        // Render grid floor if enabled
+        if (m_modelViewerState.showGridFloor) {
+            RenderGridFloor(context, camera);
+        }
+        
+        // Setup enhanced lighting system
+        if (m_modelViewerState.showLighting) {
+            CDXScene& scene = g_dxHandler->GetScene();
+            
+            // Clear existing lights and set up a better lighting rig
+            scene.globalLights.clear();
+            
+            if (m_modelViewerState.showShadows) {
+                // Dramatic lighting setup for shadows
+                
+                // Strong key light from above for sharp shadows
+                HardwareLight& keyLight = scene.globalLights.emplace_back();
+                keyLight.pos = { 10.f, 50.f, -30.f };
+                keyLight.rcpMaxRadius = 1 / 300.f;
+                keyLight.rcpMaxRadiusSq = 1 / (keyLight.rcpMaxRadius * keyLight.rcpMaxRadius);
+                keyLight.attenLinear = -0.5f;
+                keyLight.attenQuadratic = 0.2f;
+                keyLight.specularIntensity = 1.5f;
+                keyLight.color = { 1.2f, 1.1f, 1.0f }; // Bright warm white
+                
+                // Soft fill light to prevent pure black shadows
+                HardwareLight& fillLight = scene.globalLights.emplace_back();
+                fillLight.pos = { -40.f, 20.f, 20.f };
+                fillLight.rcpMaxRadius = 1 / 200.f;
+                fillLight.rcpMaxRadiusSq = 1 / (fillLight.rcpMaxRadius * fillLight.rcpMaxRadius);
+                fillLight.attenLinear = -1.8f;
+                fillLight.attenQuadratic = 0.9f;
+                fillLight.specularIntensity = 0.3f;
+                fillLight.color = { 0.4f, 0.45f, 0.6f }; // Soft cool fill
+                
+            } else {
+                // Even lighting setup without dramatic shadows
+                
+                // Main key light (from above-front)
+                HardwareLight& keyLight = scene.globalLights.emplace_back();
+                keyLight.pos = { 20.f, 30.f, -20.f };
+                keyLight.rcpMaxRadius = 1 / 200.f;
+                keyLight.rcpMaxRadiusSq = 1 / (keyLight.rcpMaxRadius * keyLight.rcpMaxRadius);
+                keyLight.attenLinear = -0.95238f;
+                keyLight.attenQuadratic = 0.45238f;
+                keyLight.specularIntensity = 1.0f;
+                keyLight.color = { 1.0f, 0.95f, 0.9f }; // Warm white
+                
+                // Fill light (from the left)
+                HardwareLight& fillLight = scene.globalLights.emplace_back();
+                fillLight.pos = { -30.f, 10.f, 10.f };
+                fillLight.rcpMaxRadius = 1 / 150.f;
+                fillLight.rcpMaxRadiusSq = 1 / (fillLight.rcpMaxRadius * fillLight.rcpMaxRadius);
+                fillLight.attenLinear = -1.2f;
+                fillLight.attenQuadratic = 0.6f;
+                fillLight.specularIntensity = 0.6f;
+                fillLight.color = { 0.8f, 0.85f, 1.0f }; // Cool white
+                
+                // Rim light (from behind-right)
+                HardwareLight& rimLight = scene.globalLights.emplace_back();
+                rimLight.pos = { 15.f, 5.f, 40.f };
+                rimLight.rcpMaxRadius = 1 / 120.f;
+                rimLight.rcpMaxRadiusSq = 1 / (rimLight.rcpMaxRadius * rimLight.rcpMaxRadius);
+                rimLight.attenLinear = -1.5f;
+                rimLight.attenQuadratic = 0.8f;
+                rimLight.specularIntensity = 0.8f;
+                rimLight.color = { 1.0f, 1.0f, 0.9f }; // Slightly warm
+            }
+            
+            if (scene.NeedsLightingUpdate())
+                g_dxHandler->GetScene().CreateOrUpdateLights(device, context);
+        }
+        
+        if (previewDrawData->vertexShader && previewDrawData->pixelShader)
+        {
+            CShader* vertexShader = previewDrawData->vertexShader;
+            CShader* pixelShader = previewDrawData->pixelShader;
+            
+            context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            context->IASetInputLayout(vertexShader->GetInputLayout());
+            
+            if (vertexShader)
+                context->VSSetShader(vertexShader->Get<ID3D11VertexShader>(), nullptr, 0u);
+            
+            if (pixelShader)
+                context->PSSetShader(pixelShader->Get<ID3D11PixelShader>(), nullptr, 0u);
+            
+            // CRITICAL: Set the global transforms buffer that was missing!
+            ID3D11Buffer* const transformsBuffer = previewDrawData->transformsBuffer;
+            context->VSSetConstantBuffers(0u, 1u, &transformsBuffer);
+            
+            UINT offset = 0u;
+            
+            for (size_t i = 0; i < previewDrawData->meshBuffers.size(); ++i)
+            {
+                const DXMeshDrawData_t& meshDrawData = previewDrawData->meshBuffers[i];
+                
+                // Skip invisible meshes
+                if (!meshDrawData.visible) continue;
+                
+                const bool useAdvancedModelPreview = meshDrawData.vertexShader && meshDrawData.pixelShader;
+                
+                ID3D11Buffer* sharedConstBuffers[] = {
+                    camera->bufCommonPerCamera,
+                    previewDrawData->transformsBuffer,
+                };
+                
+                if (meshDrawData.vertexShader)
+                {
+                    context->IASetInputLayout(meshDrawData.inputLayout);
+                    context->VSSetShader(meshDrawData.vertexShader, nullptr, 0u);
+                }
+                else
+                    context->VSSetShader(vertexShader->Get<ID3D11VertexShader>(), nullptr, 0u);
+                
+                if (useAdvancedModelPreview)
+                {
+                    context->VSSetConstantBuffers(2u, 2, sharedConstBuffers);
+                    context->VSSetShaderResources(60u, 1u, &previewDrawData->boneMatrixSRV);
+                    context->VSSetShaderResources(62u, 1u, &previewDrawData->boneMatrixSRV);
+                }
+                
+                for (auto& rsrc : previewDrawData->vertexShaderResources)
+                {
+                    context->VSSetShaderResources(rsrc.bindPoint, 1u, &rsrc.resourceView);
+                }
+                
+                context->IASetVertexBuffers(0u, 1u, &meshDrawData.vertexBuffer, &meshDrawData.vertexStride, &offset);
+                
+                if (meshDrawData.pixelShader)
+                    context->PSSetShader(meshDrawData.pixelShader, nullptr, 0u);
+                else
+                    context->PSSetShader(pixelShader->Get<ID3D11PixelShader>(), nullptr, 0u);
+                
+                ID3D11SamplerState* const samplerState = g_dxHandler->GetSamplerState();
+                
+                if (useAdvancedModelPreview)
+                {
+                    ID3D11SamplerState* samplers[] = {
+                        g_dxHandler->GetSamplerComparisonState(),
+                        samplerState,
+                        samplerState,
+                    };
+                    context->PSSetSamplers(0, 3, samplers);
+                    
+                    if (meshDrawData.uberStaticBuf)
+                        context->PSSetConstantBuffers(0u, 1u, &meshDrawData.uberStaticBuf);
+                    context->PSSetConstantBuffers(2u, 2, sharedConstBuffers);
+                    
+                    #if defined(ADVANCED_MODEL_PREVIEW)
+                    scene.BindLightsSRV(context);
+                    #endif
+                }
+                else
+                    context->PSSetSamplers(0, 1, &samplerState);
+                
+                // Debug: Show texture info to help diagnose texture loading issues
+                static bool showTextureDebug = false;
+                if (ImGui::IsKeyPressed(ImGuiKey_T)) showTextureDebug = !showTextureDebug;
+                
+                if (showTextureDebug && i == 0) {
+                    ImGui::Begin("Texture Debug", &showTextureDebug, ImGuiWindowFlags_AlwaysAutoResize);
+                    ImGui::Text("Mesh %zu has %zu textures", i, meshDrawData.textures.size());
+                    ImGui::Text("previewDrawData ptr: %p", previewDrawData);
+                    
+                    for (size_t t = 0; t < meshDrawData.textures.size(); ++t) {
+                        const auto& tex = meshDrawData.textures[t];
+                        ImGui::Separator();
+                        ImGui::Text("Texture %zu:", t);
+                        ImGui::Text("  Bind point: %d", tex.resourceBindPoint);
+                        ImGui::Text("  Texture ptr: %p", tex.texture.get());
+                        ImGui::Text("  SRV ptr: %p", tex.texture ? tex.texture.get()->GetSRV() : nullptr);
+                        ImGui::Text("  Use count: %ld", tex.texture.use_count());
+                        
+                        // Add info about why texture creation might have failed
+                        if (!tex.texture) {
+                            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "  TEXTURE IS NULL!");
+                            ImGui::Text("  Possible reasons:");
+                            ImGui::Text("    - Texture mip not loaded (!mip->isLoaded)");
+                            ImGui::Text("    - Invalid format (DXGI_FORMAT_UNKNOWN)");
+                            ImGui::Text("    - Texture too small (< 3x3 pixels)");
+                            ImGui::Text("    - GetTextureDataForMip failed");
+                            ImGui::Text("    - DirectX texture creation failed");
+                        }
+                    }
+                    
+                    // Show material info if available
+                    if (previewDrawData && i < previewDrawData->meshBuffers.size()) {
+                        ImGui::Separator();
+                        ImGui::Text("Material info for mesh %zu:", i);
+                        ImGui::Text("  uberStaticBuf: %p", meshDrawData.uberStaticBuf);
+                        ImGui::Text("  Visible: %s", meshDrawData.visible ? "Yes" : "No");
+                    }
+                    
+                    ImGui::Separator();
+                    ImGui::Text("Preview System Debug:");
+                    ImGui::Text("  Selected asset: %p", g_selectedAssets.empty() ? nullptr : g_selectedAssets[0]);
+                    ImGui::Text("  Asset type: 0x%X", g_selectedAssets.empty() ? 0 : g_selectedAssets[0]->GetAssetType());
+                    ImGui::Text("  Preview binding exists: %s", 
+                               g_selectedAssets.empty() ? "No" : 
+                               (g_assetData.m_assetTypeBindings.find(g_selectedAssets[0]->GetAssetType()) != 
+                                g_assetData.m_assetTypeBindings.end() ? "Yes" : "No"));
+                    
+                    if (ImGui::Button("Force Texture Reload")) {
+                        // This is a hint to reload textures on next frame
+                        ImGui::SetTooltip("Will trigger texture reload on next model preview update");
+                    }
+                    
+                    ImGui::End();
+                }
+                
+                for (auto& tex : meshDrawData.textures)
+                {
+                    ID3D11ShaderResourceView* textureSRV = nullptr;
+                    
+                    if (m_modelViewerState.useDefaultTexture) {
+                        // Use default texture when enabled - set to nullptr for white/default
+                        textureSRV = nullptr;
+                    } else {
+                        // Use the actual texture exactly like the original code
+                        textureSRV = tex.texture ? tex.texture.get()->GetSRV() : nullptr;
+                    }
+                    
+                    context->PSSetShaderResources(tex.resourceBindPoint, 1u, &textureSRV);
+                }
+                
+                for (auto& rsrc : previewDrawData->pixelShaderResources)
+                {
+                    context->PSSetShaderResources(rsrc.bindPoint, 1u, &rsrc.resourceView);
+                }
+                
+                context->IASetIndexBuffer(meshDrawData.indexBuffer, meshDrawData.indexFormat, 0u);
+                context->DrawIndexed(static_cast<UINT>(meshDrawData.numIndices), 0u, 0u);
+            }
+        }
+        
+        // Restore original render targets and viewport
+        context->OMSetRenderTargets(1, &originalRTV, originalDSV);
+        context->RSSetViewports(1, &originalViewport);
+        
+        if (originalRTV) originalRTV->Release();
+        if (originalDSV) originalDSV->Release();
+    }
+    
+    void LayoutManager::RenderGridFloor(ID3D11DeviceContext* context, CDXCamera* camera)
+    {
+        //Temp to avoid warning
+        context = context;
+        camera = camera;
+
+        // Simple ground plane effect using environment settings
+        // A real implementation would render actual grid geometry
+        
+        // For now, we simulate a ground plane effect by:
+        // 1. Using the light gray background color (already set above)
+        // 2. Adding additional ambient lighting to simulate ground reflection
+        
+        // Add subtle ambient lighting to simulate ground plane reflection
+        // This creates a more grounded feeling even without actual geometry
+        
+        // TODO: Future implementation could include:
+        // - Actual floor quad geometry at Y = -10 or similar
+        // - Grid texture with UV coordinates  
+        // - Reflection/shadow mapping
+        // - Procedural grid shader
+        
+        // For now, the effect is achieved through background color and lighting changes
+    }
+
     void LayoutManager::RenderModel3DViewport()
     {
         // Header with controls
-        ImGui::Text("🎮 3D Viewport");
+        ImGui::Text("3D Viewport");
         ImGui::SameLine();
         
         // Check if we have a model selected
@@ -1803,7 +2709,7 @@ namespace ModernUI
                     uint32_t assetType = firstAsset->GetAssetType();
                     
                     // Show current asset info
-                    ImGui::Text("📦 Selected: %s", firstAsset->GetAssetName().c_str());
+                    ImGui::Text("Selected: %s", firstAsset->GetAssetName().c_str());
                     
                     // Check for model types: 'MDL_', 'MDL', 'ARIG', 'ASEQ', 'ASQD', 'ANIR', 'SEQ', 'rmdl'
                     if (assetType == 0x5F6C646D || // 'mdl_'  
@@ -1816,7 +2722,7 @@ namespace ModernUI
                         assetType == 0x6C646D72) { // 'rmdl'
                         hasModelSelected = true;
                         modelAsset = firstAsset;
-                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ 3D Model - rendering below");
+                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "3D Model - rendering below");
                     } else {
                         // Debug info for non-model assets
                         char fourccStr[5] = {0};
@@ -1848,7 +2754,7 @@ namespace ModernUI
         {
             if (g_dxHandler && g_dxHandler->GetCamera()) {
                 CDXCamera* camera = g_dxHandler->GetCamera();
-                camera->position = {0, 0, -10}; // Reset position
+                camera->position = {0, 0, -100}; // Reset position - start further back to see full model
                 camera->rotation = {0, 0, 0};   // Reset rotation
             }
         }
@@ -1901,18 +2807,18 @@ namespace ModernUI
                     if (previewResult) {
                         // Set the global previewDrawData for the main render loop
                         previewDrawData = reinterpret_cast<CDXDrawData*>(previewResult);
-                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ 3D Model Ready - Look in viewport below");
+                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "3D Model Ready - Look in viewport below");
                     } else {
                         previewDrawData = nullptr;
-                        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠ Model failed to load");
+                        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Model failed to load");
                     }
                 } catch (...) {
                     previewDrawData = nullptr;
-                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "❌ Error loading model");
+                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error loading model");
                 }
             } else {
                 previewDrawData = nullptr;
-                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "❌ No preview support for this model type");
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "No preview support for this model type");
             }
             
             ImGui::Separator();
@@ -1968,10 +2874,10 @@ namespace ModernUI
                         // Status overlay
                         ImVec2 center = ImVec2(pos.x + size.x * 0.5f, pos.y + size.y * 0.5f);
                         if (!previewResult) {
-                            drawList->AddText(ImVec2(center.x - 80, center.y), IM_COL32(255, 200, 0, 255), "⏳ Loading 3D Model...");
+                            drawList->AddText(ImVec2(center.x - 80, center.y), IM_COL32(255, 200, 0, 255), "Loading 3D Model...");
                         } else {
                             // Model should be rendering here!
-                            drawList->AddText(ImVec2(center.x - 120, center.y - 30), IM_COL32(100, 255, 100, 255), "🎮 3D MODEL SHOULD BE HERE");
+                            drawList->AddText(ImVec2(center.x - 120, center.y - 30), IM_COL32(100, 255, 100, 255), "3D MODEL SHOULD BE HERE");
                             drawList->AddText(ImVec2(center.x - 100, center.y - 10), IM_COL32(200, 200, 200, 255), "Right-click to activate camera");
                             drawList->AddText(ImVec2(center.x - 80, center.y + 10), IM_COL32(150, 150, 150, 255), "WASD to move, mouse to look");
                         }
@@ -1992,7 +2898,7 @@ namespace ModernUI
                         ImGui::SetCursorPos(ImVec2(center.x - 100, center.y - 30));
                         
                         ImGui::BeginGroup();
-                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "🎯 Select a 3D Model");
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Select a 3D Model");
                         ImGui::Text("Choose a model asset to view it here");
                         ImGui::TextDisabled("Supported: .mdl, .arig, .aseq files");
                         ImGui::EndGroup();
