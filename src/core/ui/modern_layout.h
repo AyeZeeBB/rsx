@@ -95,6 +95,14 @@ namespace ModernUI
         void RenderSafeTexturePreview(void* pakAsset);
         void RenderMinimalTextureImage(void* pakAsset, void* txtrAsset);
         void RenderTextureViewer(CAsset* textureAsset);
+        
+        // Material sphere preview
+        void RenderMaterialSpherePreview(const void* material, CAsset* materialAsset);
+        bool CreateMaterialSphereRenderTarget(int width, int height);
+        void DestroyMaterialSphereRenderTarget();
+        void CreateSphereGeometry();
+        void DestroySphereGeometry();
+        void RenderMaterialSphereToTexture(const void* material);
         void RenderMaterialViewer(CAsset* materialAsset);
         void RenderModel3DViewport();
         
@@ -104,6 +112,8 @@ namespace ModernUI
         AssetTreeNode m_assetTreeRoot;
         bool m_showAssetTreeView = true;
         bool m_showAssetTableView = false;
+        bool m_treeNeedsRebuild = true;
+        bool m_lastJobActionState = false; // Track PAK loading state
         
         // 3D Model Viewer State
         struct ModelViewerState {
@@ -129,6 +139,31 @@ namespace ModernUI
             int renderWidth = 800;
             int renderHeight = 600;
         } m_modelViewerState;
+        
+        // Material Sphere Preview State
+        struct MaterialSphereState {
+            bool autoRotate = true;
+            float rotationSpeed = 1.0f;
+            float sphereScale = 1.0f;
+            float currentRotation = 0.0f;
+            bool showWireframe = false;
+            bool showLighting = true;
+            
+            // Render-to-texture resources
+            ID3D11Texture2D* renderTexture = nullptr;
+            ID3D11RenderTargetView* renderTargetView = nullptr;
+            ID3D11ShaderResourceView* shaderResourceView = nullptr;
+            ID3D11Texture2D* depthTexture = nullptr;
+            ID3D11DepthStencilView* depthStencilView = nullptr;
+            int renderWidth = 400;
+            int renderHeight = 400;
+            
+            // Sphere geometry
+            ID3D11Buffer* vertexBuffer = nullptr;
+            ID3D11Buffer* indexBuffer = nullptr;
+            UINT indexCount = 0;
+            UINT vertexStride = 0;
+        } m_materialSphereState;
         
         // Layout settings
         float m_leftPanelWidth = 350.0f;

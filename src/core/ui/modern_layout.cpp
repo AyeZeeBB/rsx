@@ -17,7 +17,9 @@
 #include <game/rtech/cpakfile.h>
 #include <game/rtech/assets/texture.h>
 #include <game/rtech/assets/material.h>
+#include <core/mdl/modeldata.h>
 #include <core/input/input.h>
+#include <core/render/dxshader.h>
 
 // External declarations
 extern CDXParentHandler* g_dxHandler;
@@ -59,6 +61,8 @@ namespace ModernUI
     {
         // Clean up render target resources
         DestroyModelViewerRenderTarget();
+        DestroyMaterialSphereRenderTarget();
+        DestroySphereGeometry();
     }
 
     void LayoutManager::Initialize()
@@ -501,6 +505,20 @@ namespace ModernUI
     {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
         
+        // Auto-refresh when PAK loading completes
+        bool currentJobActionState = inJobAction.load();
+        if (m_lastJobActionState && !currentJobActionState) {
+            // PAK loading just finished - trigger tree rebuild
+            m_treeNeedsRebuild = true;
+        }
+        m_lastJobActionState = currentJobActionState;
+        
+        // Rebuild tree if needed
+        if (m_treeNeedsRebuild) {
+            RefreshAssetTree();
+            m_treeNeedsRebuild = false;
+        }
+        
         // Add manual padding with spacing and indentation
         ImGui::Spacing();
         ImGui::Indent(8.0f);
@@ -511,6 +529,12 @@ namespace ModernUI
         if (ImGui::SmallButton("Refresh"))
         {
             RefreshAssetTree();
+        }
+        
+        // Show loading indicator when PAKs are loading
+        if (currentJobActionState) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Loading...");
         }
         
         ImGui::SameLine();
@@ -718,6 +742,87 @@ namespace ModernUI
         }
         
         ImGui::Spacing();
+        
+        // Asset-specific details
+        const char* assetTypeBytes = reinterpret_cast<const char*>(&assetType);
+        if (strncmp(assetTypeBytes, "matl", 4) == 0) {
+            // Cast to CPakAsset to access extraData()
+            CPakAsset* pakAsset = static_cast<CPakAsset*>(primaryAsset);
+            if (pakAsset && pakAsset->extraData()) {
+                DrawSeparatorWithText("Material Details");
+                
+                const MaterialAsset* material = reinterpret_cast<const MaterialAsset*>(pakAsset->extraData());
+            
+                // Material shader info
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("Shader:");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(-1);
+                static char shaderBuffer[256];
+                std::string shaderName = material->shaderSetAsset ? material->shaderSetAsset->GetAssetName() : "Not loaded";
+                strncpy_s(shaderBuffer, shaderName.c_str(), sizeof(shaderBuffer) - 1);
+                ImGui::InputText("##MaterialShader", shaderBuffer, sizeof(shaderBuffer), ImGuiInputTextFlags_ReadOnly);
+            
+                // Texture count
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("Textures:");
+                ImGui::SameLine();
+                int totalTextures = static_cast<int>(material->txtrAssets.size());
+                int loadedTextures = 0;
+                for (const auto& entry : material->txtrAssets) {
+                    if (entry.asset) {
+                        CPakAsset* texturePakAsset = static_cast<CPakAsset*>(entry.asset);
+                        if (texturePakAsset && texturePakAsset->extraData()) {
+                            TextureAsset* txtr = reinterpret_cast<TextureAsset*>(texturePakAsset->extraData());
+                            if (!txtr->mipArray.empty()) {
+                                loadedTextures++;
+                            }
+                        }
+                    }
+                }
+            ImGui::Text("%d total (%d loaded)", totalTextures, loadedTextures);
+            
+                // List textures with details
+                if (totalTextures > 0 && ImGui::TreeNode("Texture Details")) {
+                    for (size_t i = 0; i < material->txtrAssets.size(); ++i) {
+                        const auto& entry = material->txtrAssets[i];
+                        if (entry.asset) {
+                            CPakAsset* texturePakAsset = static_cast<CPakAsset*>(entry.asset);
+                            bool hasData = texturePakAsset && texturePakAsset->extraData() != nullptr;
+                            ImGui::PushStyleColor(ImGuiCol_Text, hasData ? ImVec4(0.8f, 0.8f, 0.8f, 1.0f) : ImVec4(0.6f, 0.4f, 0.4f, 1.0f));
+                            
+                            ImGui::Text("Slot %d: %s", entry.index, entry.asset->GetAssetName().c_str());
+                            
+                            if (hasData) {
+                                TextureAsset* txtr = reinterpret_cast<TextureAsset*>(texturePakAsset->extraData());
+                                if (!txtr->mipArray.empty()) {
+                                    ImGui::SameLine();
+                                    ImGui::TextDisabled("(%dx%d, %zu mips)", txtr->width, txtr->height, txtr->mipArray.size());
+                                    
+                                    // Show loading status
+                                    int loadedMips = 0;
+                                    for (const auto& mip : txtr->mipArray) {
+                                        if (mip.isLoaded) loadedMips++;
+                                    }
+                                    if (loadedMips < static_cast<int>(txtr->mipArray.size())) {
+                                        ImGui::SameLine();
+                                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.0f, 1.0f), "[Loading %d/%zu]", loadedMips, txtr->mipArray.size());
+                                    }
+                                }
+                            } else {
+                                ImGui::SameLine();
+                                ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "[Not loaded]");
+                            }
+                            
+                            ImGui::PopStyleColor();
+                        }
+                    }
+                    ImGui::TreePop();
+                }
+                
+                ImGui::Spacing();
+            }
+        }
         
         // Export status
         DrawSeparatorWithText("Export Status");
@@ -1972,13 +2077,6 @@ namespace ModernUI
                     // Force first frame periodically to reload textures when debugging
                     static int forceFirstFrameCounter = 0;
                     bool actualFirstFrame = isFirstFrame;
-                    if (showTextureDebug) {
-                        forceFirstFrameCounter++;
-                        if (forceFirstFrameCounter > 60) { // Every 60 frames when debugging
-                            actualFirstFrame = true;
-                            forceFirstFrameCounter = 0;
-                        }
-                    }
                     
                     lastPreviewedAsset = modelAsset;
                     
@@ -2578,61 +2676,6 @@ namespace ModernUI
                 else
                     context->PSSetSamplers(0, 1, &samplerState);
                 
-                // Debug: Show texture info to help diagnose texture loading issues
-                static bool showTextureDebug = false;
-                if (ImGui::IsKeyPressed(ImGuiKey_T)) showTextureDebug = !showTextureDebug;
-                
-                if (showTextureDebug && i == 0) {
-                    ImGui::Begin("Texture Debug", &showTextureDebug, ImGuiWindowFlags_AlwaysAutoResize);
-                    ImGui::Text("Mesh %zu has %zu textures", i, meshDrawData.textures.size());
-                    ImGui::Text("previewDrawData ptr: %p", previewDrawData);
-                    
-                    for (size_t t = 0; t < meshDrawData.textures.size(); ++t) {
-                        const auto& tex = meshDrawData.textures[t];
-                        ImGui::Separator();
-                        ImGui::Text("Texture %zu:", t);
-                        ImGui::Text("  Bind point: %d", tex.resourceBindPoint);
-                        ImGui::Text("  Texture ptr: %p", tex.texture.get());
-                        ImGui::Text("  SRV ptr: %p", tex.texture ? tex.texture.get()->GetSRV() : nullptr);
-                        ImGui::Text("  Use count: %ld", tex.texture.use_count());
-                        
-                        // Add info about why texture creation might have failed
-                        if (!tex.texture) {
-                            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "  TEXTURE IS NULL!");
-                            ImGui::Text("  Possible reasons:");
-                            ImGui::Text("    - Texture mip not loaded (!mip->isLoaded)");
-                            ImGui::Text("    - Invalid format (DXGI_FORMAT_UNKNOWN)");
-                            ImGui::Text("    - Texture too small (< 3x3 pixels)");
-                            ImGui::Text("    - GetTextureDataForMip failed");
-                            ImGui::Text("    - DirectX texture creation failed");
-                        }
-                    }
-                    
-                    // Show material info if available
-                    if (previewDrawData && i < previewDrawData->meshBuffers.size()) {
-                        ImGui::Separator();
-                        ImGui::Text("Material info for mesh %zu:", i);
-                        ImGui::Text("  uberStaticBuf: %p", meshDrawData.uberStaticBuf);
-                        ImGui::Text("  Visible: %s", meshDrawData.visible ? "Yes" : "No");
-                    }
-                    
-                    ImGui::Separator();
-                    ImGui::Text("Preview System Debug:");
-                    ImGui::Text("  Selected asset: %p", g_selectedAssets.empty() ? nullptr : g_selectedAssets[0]);
-                    ImGui::Text("  Asset type: 0x%X", g_selectedAssets.empty() ? 0 : g_selectedAssets[0]->GetAssetType());
-                    ImGui::Text("  Preview binding exists: %s", 
-                               g_selectedAssets.empty() ? "No" : 
-                               (g_assetData.m_assetTypeBindings.find(g_selectedAssets[0]->GetAssetType()) != 
-                                g_assetData.m_assetTypeBindings.end() ? "Yes" : "No"));
-                    
-                    if (ImGui::Button("Force Texture Reload")) {
-                        // This is a hint to reload textures on next frame
-                        ImGui::SetTooltip("Will trigger texture reload on next model preview update");
-                    }
-                    
-                    ImGui::End();
-                }
-                
                 for (auto& tex : meshDrawData.textures)
                 {
                     ID3D11ShaderResourceView* textureSRV = nullptr;
@@ -3151,6 +3194,12 @@ namespace ModernUI
                         ImGui::EndTabItem();
                     }
 
+                    if (ImGui::BeginTabItem("Sphere Preview"))
+                    {
+                        RenderMaterialSpherePreview(material, materialAsset);
+                        ImGui::EndTabItem();
+                    }
+
                     ImGui::EndTabBar();
                 }
             }
@@ -3161,6 +3210,579 @@ namespace ModernUI
         } catch (...) {
             ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Unknown error viewing material");
         }
+    }
+
+void LayoutManager::RenderMaterialSpherePreview(const void* materialData, CAsset* materialAsset)
+{
+    materialAsset = materialAsset;
+    const MaterialAsset* material = reinterpret_cast<const MaterialAsset*>(materialData);
+    
+    if (!material) {
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid material data");
+        return;
+    }
+
+    // Clean header for sphere preview - always show
+    ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "3D Material Preview");
+    
+    // Quick texture status in a compact format
+    int validTextures = 0;
+    int totalTextures = static_cast<int>(material->txtrAssets.size());
+    
+    for (const auto& entry : material->txtrAssets) {
+        if (entry.asset && entry.asset->extraData()) {
+            TextureAsset* txtr = reinterpret_cast<TextureAsset*>(entry.asset->extraData());
+            if (!txtr->mipArray.empty()) {
+                validTextures++;
+            }
+        }
+    }
+    
+    ImGui::SameLine();
+    if (validTextures > 0) {
+        ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "(%d/%d textures)", validTextures, totalTextures);
+    } else if (totalTextures > 0) {
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.0f, 1.0f), "(loading %d textures...)", totalTextures);
+    } else {
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(no textures)");
+    }
+        
+        // Compact controls in a nice layout
+        ImGui::Spacing();
+        
+        // First row: Auto rotate + speed
+        ImGui::Checkbox("Auto Rotate", &m_materialSphereState.autoRotate);
+        if (m_materialSphereState.autoRotate) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(120);
+            ImGui::SliderFloat("##RotSpeed", &m_materialSphereState.rotationSpeed, 0.1f, 5.0f);
+            ImGui::SameLine();
+            ImGui::TextDisabled("Speed");
+        }
+        
+        // Second row: Scale + rendering options + reset
+        ImGui::SetNextItemWidth(120);
+        ImGui::SliderFloat("Scale", &m_materialSphereState.sphereScale, 0.5f, 3.0f);
+        ImGui::SameLine();
+        ImGui::Checkbox("Wireframe", &m_materialSphereState.showWireframe);
+        ImGui::SameLine();
+        ImGui::Checkbox("Lighting", &m_materialSphereState.showLighting);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Reset")) {
+            m_materialSphereState.sphereScale = 1.0f;
+            m_materialSphereState.rotationSpeed = 1.0f;
+            m_materialSphereState.currentRotation = 0.0f;
+        }
+        
+        // Create sphere geometry if needed
+        CreateSphereGeometry();
+        
+        // Create or resize render target if needed
+        ImVec2 canvasSize = ImGui::GetContentRegionAvail();
+        canvasSize.y = std::min(canvasSize.y, 400.0f); // Max height
+        canvasSize.x = std::min(canvasSize.x, 400.0f); // Max width
+        
+        if (canvasSize.x < 200 || canvasSize.y < 200) {
+            canvasSize = ImVec2(300, 300); // Minimum size
+        }
+        
+        int targetWidth = static_cast<int>(canvasSize.x);
+        int targetHeight = static_cast<int>(canvasSize.y);
+        
+        if (!m_materialSphereState.renderTargetView || 
+            m_materialSphereState.renderWidth != targetWidth || 
+            m_materialSphereState.renderHeight != targetHeight) {
+            CreateMaterialSphereRenderTarget(targetWidth, targetHeight);
+        }
+        
+        // Render the sphere to texture
+        if (m_materialSphereState.renderTargetView) {
+            RenderMaterialSphereToTexture(material);
+            
+            // Display the rendered texture
+            if (m_materialSphereState.shaderResourceView) {
+                ImGui::Image(reinterpret_cast<void*>(m_materialSphereState.shaderResourceView), canvasSize);
+            }
+        }
+        
+    }
+
+    bool LayoutManager::CreateMaterialSphereRenderTarget(int width, int height)
+    {
+        DestroyMaterialSphereRenderTarget();
+        
+        if (!g_dxHandler || !g_dxHandler->GetDevice()) {
+            return false;
+        }
+        
+        ID3D11Device* device = g_dxHandler->GetDevice();
+        
+        // Create render texture
+        D3D11_TEXTURE2D_DESC textureDesc = {};
+        textureDesc.Width = width;
+        textureDesc.Height = height;
+        textureDesc.MipLevels = 1;
+        textureDesc.ArraySize = 1;
+        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        textureDesc.SampleDesc.Count = 1;
+        textureDesc.SampleDesc.Quality = 0;
+        textureDesc.Usage = D3D11_USAGE_DEFAULT;
+        textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        textureDesc.CPUAccessFlags = 0;
+        textureDesc.MiscFlags = 0;
+        
+        HRESULT hr = device->CreateTexture2D(&textureDesc, nullptr, &m_materialSphereState.renderTexture);
+        if (FAILED(hr)) return false;
+        
+        // Create render target view
+        hr = device->CreateRenderTargetView(m_materialSphereState.renderTexture, nullptr, &m_materialSphereState.renderTargetView);
+        if (FAILED(hr)) return false;
+        
+        // Create shader resource view
+        hr = device->CreateShaderResourceView(m_materialSphereState.renderTexture, nullptr, &m_materialSphereState.shaderResourceView);
+        if (FAILED(hr)) return false;
+        
+        // Create depth texture
+        D3D11_TEXTURE2D_DESC depthDesc = textureDesc;
+        depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+        
+        hr = device->CreateTexture2D(&depthDesc, nullptr, &m_materialSphereState.depthTexture);
+        if (FAILED(hr)) return false;
+        
+        // Create depth stencil view
+        hr = device->CreateDepthStencilView(m_materialSphereState.depthTexture, nullptr, &m_materialSphereState.depthStencilView);
+        if (FAILED(hr)) return false;
+        
+        m_materialSphereState.renderWidth = width;
+        m_materialSphereState.renderHeight = height;
+        
+        return true;
+    }
+
+    void LayoutManager::DestroyMaterialSphereRenderTarget()
+    {
+        if (m_materialSphereState.depthStencilView) {
+            m_materialSphereState.depthStencilView->Release();
+            m_materialSphereState.depthStencilView = nullptr;
+        }
+        if (m_materialSphereState.depthTexture) {
+            m_materialSphereState.depthTexture->Release();
+            m_materialSphereState.depthTexture = nullptr;
+        }
+        if (m_materialSphereState.shaderResourceView) {
+            m_materialSphereState.shaderResourceView->Release();
+            m_materialSphereState.shaderResourceView = nullptr;
+        }
+        if (m_materialSphereState.renderTargetView) {
+            m_materialSphereState.renderTargetView->Release();
+            m_materialSphereState.renderTargetView = nullptr;
+        }
+        if (m_materialSphereState.renderTexture) {
+            m_materialSphereState.renderTexture->Release();
+            m_materialSphereState.renderTexture = nullptr;
+        }
+    }
+
+    void LayoutManager::CreateSphereGeometry()
+    {
+        if (m_materialSphereState.vertexBuffer) {
+            return; // Already created
+        }
+        
+        if (!g_dxHandler || !g_dxHandler->GetDevice()) {
+            return;
+        }
+        
+        ID3D11Device* device = g_dxHandler->GetDevice();
+        
+        // Create sphere geometry (UV sphere)
+        const int rings = 16;
+        const int sectors = 32;
+        const float radius = 1.0f;
+        
+        std::vector<Vertex_t> vertices;
+        std::vector<uint16_t> indices;
+        
+        // Generate vertices
+        for (int r = 0; r <= rings; ++r) {
+            float phi = static_cast<float>(r) * XM_PI / rings;
+            float y = radius * cosf(phi);
+            float ringRadius = radius * sinf(phi);
+            
+            for (int s = 0; s <= sectors; ++s) {
+                float theta = static_cast<float>(s) * 2.0f * XM_PI / sectors;
+                float x = ringRadius * cosf(theta);
+                float z = ringRadius * sinf(theta);
+                
+                Vertex_t vertex;
+                vertex.position = Vector(x, y, z);
+                
+                // Pack normal properly - for now, use a simple encoding
+                Vector normalVec = Vector(x / radius, y / radius, z / radius);
+                vertex.normalPacked = Normal32(); // Initialize with zero
+                vertex.normalPacked.PackNormal(normalVec, Vector4D(1, 0, 0, 1)); // Pack with tangent
+                
+                vertex.texcoord = Vector2D(static_cast<float>(s) / sectors, static_cast<float>(r) / rings);
+                vertex.color = Color32(255, 255, 255, 255); // White
+                vertex.weightCount = 0;
+                vertex.weightIndex = 0;
+                
+                vertices.push_back(vertex);
+            }
+        }
+        
+        // Generate indices
+        for (int r = 0; r < rings; ++r) {
+            for (int s = 0; s < sectors; ++s) {
+                int current = r * (sectors + 1) + s;
+                int next = current + sectors + 1;
+                
+                // First triangle
+                indices.push_back(static_cast<uint16_t>(current));
+                indices.push_back(static_cast<uint16_t>(next));
+                indices.push_back(static_cast<uint16_t>(current + 1));
+                
+                // Second triangle
+                indices.push_back(static_cast<uint16_t>(current + 1));
+                indices.push_back(static_cast<uint16_t>(next));
+                indices.push_back(static_cast<uint16_t>(next + 1));
+            }
+        }
+        
+        // Create vertex buffer
+        D3D11_BUFFER_DESC vbDesc = {};
+        vbDesc.Usage = D3D11_USAGE_DEFAULT;
+        vbDesc.ByteWidth = static_cast<UINT>(vertices.size() * sizeof(Vertex_t));
+        vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        vbDesc.CPUAccessFlags = 0;
+        
+        D3D11_SUBRESOURCE_DATA vbData = {};
+        vbData.pSysMem = vertices.data();
+        
+        HRESULT hr = device->CreateBuffer(&vbDesc, &vbData, &m_materialSphereState.vertexBuffer);
+        if (FAILED(hr)) return;
+        
+        // Create index buffer
+        D3D11_BUFFER_DESC ibDesc = {};
+        ibDesc.Usage = D3D11_USAGE_DEFAULT;
+        ibDesc.ByteWidth = static_cast<UINT>(indices.size() * sizeof(uint16_t));
+        ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        ibDesc.CPUAccessFlags = 0;
+        
+        D3D11_SUBRESOURCE_DATA ibData = {};
+        ibData.pSysMem = indices.data();
+        
+        hr = device->CreateBuffer(&ibDesc, &ibData, &m_materialSphereState.indexBuffer);
+        if (FAILED(hr)) return;
+        
+        m_materialSphereState.indexCount = static_cast<UINT>(indices.size());
+        m_materialSphereState.vertexStride = sizeof(Vertex_t);
+    }
+
+    void LayoutManager::DestroySphereGeometry()
+    {
+        if (m_materialSphereState.indexBuffer) {
+            m_materialSphereState.indexBuffer->Release();
+            m_materialSphereState.indexBuffer = nullptr;
+        }
+        if (m_materialSphereState.vertexBuffer) {
+            m_materialSphereState.vertexBuffer->Release();
+            m_materialSphereState.vertexBuffer = nullptr;
+        }
+        m_materialSphereState.indexCount = 0;
+        m_materialSphereState.vertexStride = 0;
+    }
+
+    void LayoutManager::RenderMaterialSphereToTexture(const void* materialData)
+    {
+        const MaterialAsset* material = reinterpret_cast<const MaterialAsset*>(materialData);
+        
+        if (!material || !g_dxHandler || !m_materialSphereState.renderTargetView) {
+            return;
+        }
+        
+        ID3D11DeviceContext* context = g_dxHandler->GetDeviceContext();
+        CDXCamera* camera = g_dxHandler->GetCamera();
+        
+        // Save original render targets
+        ID3D11RenderTargetView* originalRTV = nullptr;
+        ID3D11DepthStencilView* originalDSV = nullptr;
+        context->OMGetRenderTargets(1, &originalRTV, &originalDSV);
+        
+        // Save original viewport
+        UINT numViewports = 1;
+        D3D11_VIEWPORT originalViewport;
+        context->RSGetViewports(&numViewports, &originalViewport);
+        
+        // Set our render target
+        context->OMSetRenderTargets(1, &m_materialSphereState.renderTargetView, m_materialSphereState.depthStencilView);
+        
+        // Clear render target (dark background)
+        float clearColor[4] = {0.1f, 0.1f, 0.15f, 1.0f};
+        context->ClearRenderTargetView(m_materialSphereState.renderTargetView, clearColor);
+        context->ClearDepthStencilView(m_materialSphereState.depthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
+        
+        // Set viewport
+        D3D11_VIEWPORT viewport = {};
+        viewport.TopLeftX = 0;
+        viewport.TopLeftY = 0;
+        viewport.Width = static_cast<float>(m_materialSphereState.renderWidth);
+        viewport.Height = static_cast<float>(m_materialSphereState.renderHeight);
+        viewport.MinDepth = 0.0f;
+        viewport.MaxDepth = 1.0f;
+        context->RSSetViewports(1, &viewport);
+        
+        // Set render states
+        context->RSSetState(g_dxHandler->GetRasterizerState());
+        context->OMSetDepthStencilState(g_dxHandler->GetDepthStencilState(), 1u);
+        
+        // Update rotation
+        if (m_materialSphereState.autoRotate) {
+            m_materialSphereState.currentRotation += m_materialSphereState.rotationSpeed * 0.016f; // Assume ~60fps
+            if (m_materialSphereState.currentRotation > 2.0f * XM_PI) {
+                m_materialSphereState.currentRotation -= 2.0f * XM_PI;
+            }
+        }
+        
+        // Setup camera for sphere (looking at origin)
+        camera->CommitCameraDataBufferUpdates();
+        
+        // Create world matrix with rotation and scale
+        XMMATRIX world = XMMatrixScaling(m_materialSphereState.sphereScale, m_materialSphereState.sphereScale, m_materialSphereState.sphereScale) *
+                        XMMatrixRotationY(m_materialSphereState.currentRotation);
+        
+        // Create view matrix (camera looking at sphere from distance)
+        XMMATRIX view = XMMatrixLookAtLH(
+            XMVectorSet(0, 0, -3, 1),  // Camera position
+            XMVectorSet(0, 0, 0, 1),   // Look at origin
+            XMVectorSet(0, 1, 0, 0)    // Up vector
+        );
+        
+        // Create projection matrix
+        float aspectRatio = static_cast<float>(m_materialSphereState.renderWidth) / static_cast<float>(m_materialSphereState.renderHeight);
+        XMMATRIX projection = XMMatrixPerspectiveFovLH(XM_PIDIV4, aspectRatio, 0.1f, 100.0f);
+        
+        // Setup lighting (similar to model viewer)
+        CDXScene& scene = g_dxHandler->GetScene();
+        
+        if (scene.globalLights.size() == 0) {
+            HardwareLight& keyLight = scene.globalLights.emplace_back();
+            keyLight.pos = {2, 3, -2};
+            keyLight.rcpMaxRadius = 1 / 50.f;
+            keyLight.rcpMaxRadiusSq = 1 / (keyLight.rcpMaxRadius * keyLight.rcpMaxRadius);
+            keyLight.attenLinear = -1.95238f;
+            keyLight.attenQuadratic = 0.95238f;
+            keyLight.specularIntensity = 1.f;
+            keyLight.color = {1.0f, 0.95f, 0.9f}; // Warm key light
+            
+            HardwareLight& fillLight = scene.globalLights.emplace_back();
+            fillLight.pos = {-1, 1, 2};
+            fillLight.rcpMaxRadius = 1 / 30.f;
+            fillLight.rcpMaxRadiusSq = 1 / (fillLight.rcpMaxRadius * fillLight.rcpMaxRadius);
+            fillLight.attenLinear = -1.95238f;
+            fillLight.attenQuadratic = 0.95238f;
+            fillLight.specularIntensity = 0.3f;
+            fillLight.color = {0.7f, 0.8f, 1.0f}; // Cool fill light
+        }
+        
+        if (scene.NeedsLightingUpdate()) {
+            scene.CreateOrUpdateLights(g_dxHandler->GetDevice(), context);
+        }
+        
+        // Create working shader source code for the material sphere
+        static const char* sphereVertexShader = 
+            "struct VS_Input\n"
+            "{\n"
+            "    float3 position : POSITION;\n"
+            "    uint normal : NORMAL;\n"
+            "    uint color : COLOR;\n"
+            "    float2 uv : TEXCOORD;\n"
+            "};\n"
+            "struct VS_Output\n"
+            "{\n"
+            "    float4 position : SV_POSITION;\n"
+            "    float3 worldPosition : POSITION;\n"
+            "    float4 color : COLOR;\n"
+            "    float3 normal : NORMAL;\n"
+            "    float2 uv : TEXCOORD;\n"
+            "};\n"
+            "cbuffer VS_TransformConstants : register(b0)\n"
+            "{\n"
+            "    float4x4 modelMatrix;\n"
+            "    float4x4 viewMatrix;\n"
+            "    float4x4 projectionMatrix;\n"
+            "};\n"
+            "VS_Output vs_main(VS_Input input)\n"
+            "{\n"
+            "    VS_Output output;\n"
+            "    float3 pos = input.position;\n"
+            "    output.position = mul(float4(pos, 1.f), modelMatrix);\n"
+            "    output.position = mul(output.position, viewMatrix);\n"
+            "    output.position = mul(output.position, projectionMatrix);\n"
+            "    output.worldPosition = mul(float4(input.position, 1.f), modelMatrix).xyz;\n"
+            "    output.color = float4(1.0, 1.0, 1.0, 1.0);\n"
+            "    output.normal = normalize(input.position);\n"
+            "    output.uv = input.uv;\n"
+            "    return output;\n"
+            "}";
+            
+        static const char* spherePixelShader = 
+            "struct VS_Output\n"
+            "{\n"
+            "    float4 position : SV_POSITION;\n"
+            "    float3 worldPosition : POSITION;\n"
+            "    float4 color : COLOR;\n"
+            "    float3 normal : NORMAL;\n"
+            "    float2 uv : TEXCOORD;\n"
+            "};\n"
+            "Texture2D baseTexture : register(t0);\n"
+            "SamplerState texSampler : register(s0);\n"
+            "float4 ps_main(VS_Output input) : SV_Target\n"
+            "{\n"
+            "    float3 lightDir = normalize(float3(1, 1, -1));\n"
+            "    float3 normal = normalize(input.normal);\n"
+            "    float ndotl = max(0.0, dot(normal, lightDir));\n"
+            "    \n"
+            "    // Sample the texture\n"
+            "    float4 texColor = baseTexture.Sample(texSampler, input.uv);\n"
+            "    \n"
+            "    // If texture sampling failed or returns near-black, use debug pattern\n"
+            "    if (length(texColor.rgb) < 0.1) {\n"
+            "        // UV-based checker pattern for debugging\n"
+            "        float checker = step(0.5, frac(input.uv.x * 8.0)) * step(0.5, frac(input.uv.y * 8.0));\n"
+            "        checker += (1.0 - step(0.5, frac(input.uv.x * 8.0))) * (1.0 - step(0.5, frac(input.uv.y * 8.0)));\n"
+            "        texColor = float4(checker * 0.8 + 0.2, 0.2, 0.8, 1.0);\n"
+            "    }\n"
+            "    \n"
+            "    float3 finalColor = texColor.rgb * (0.3 + 0.7 * ndotl);\n"
+            "    return float4(finalColor, texColor.a);\n"
+            "}";
+        
+        // Use the corrected shader source code
+        CShader* vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("sphere_vs", sphereVertexShader, eShaderType::Vertex);
+        CShader* pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("sphere_ps", spherePixelShader, eShaderType::Pixel);
+        
+        if (vertexShader && pixelShader && m_materialSphereState.vertexBuffer && m_materialSphereState.indexBuffer) {
+            context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            context->IASetInputLayout(vertexShader->GetInputLayout());
+            
+            context->VSSetShader(vertexShader->Get<ID3D11VertexShader>(), nullptr, 0u);
+            context->PSSetShader(pixelShader->Get<ID3D11PixelShader>(), nullptr, 0u);
+            
+            // Create and bind transform buffer
+            ID3D11Buffer* transformBuffer = nullptr;
+            D3D11_BUFFER_DESC desc = {};
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.ByteWidth = sizeof(VS_TransformConstants);
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            
+            VS_TransformConstants transforms;
+            transforms.modelMatrix = XMMatrixTranspose(world);
+            transforms.viewMatrix = XMMatrixTranspose(view);
+            transforms.projectionMatrix = XMMatrixTranspose(projection);
+            
+            D3D11_SUBRESOURCE_DATA initData = {};
+            initData.pSysMem = &transforms;
+            
+            if (SUCCEEDED(g_dxHandler->GetDevice()->CreateBuffer(&desc, &initData, &transformBuffer))) {
+                context->VSSetConstantBuffers(0u, 1u, &transformBuffer);
+                
+                // Set vertex and index buffers
+                UINT offset = 0;
+                context->IASetVertexBuffers(0u, 1u, &m_materialSphereState.vertexBuffer, &m_materialSphereState.vertexStride, &offset);
+                context->IASetIndexBuffer(m_materialSphereState.indexBuffer, DXGI_FORMAT_R16_UINT, 0u);
+                
+                // Bind material textures
+                ID3D11SamplerState* samplerState = g_dxHandler->GetSamplerState();
+                context->PSSetSamplers(0, 1, &samplerState);
+                
+                // Bind lighting
+                scene.BindLightsSRV(context);
+                
+                // Bind material textures to appropriate slots
+                int texturesBound = 0;
+                for (const auto& entry : material->txtrAssets) {
+                    if (entry.asset && entry.asset->extraData()) {
+                        TextureAsset* txtr = reinterpret_cast<TextureAsset*>(entry.asset->extraData());
+                        if (!txtr->mipArray.empty()) {
+                            // Try different mip levels if the highest quality one fails
+                            std::shared_ptr<CTexture> texture = nullptr;
+                            
+                            // Try highest quality first (last mip)
+                            const auto& highestMip = txtr->mipArray[txtr->mipArray.size() - 1];
+                            if (highestMip.isLoaded) {
+                                texture = CreateTextureFromMip(entry.asset, &highestMip, s_PakToDxgiFormat[txtr->imgFormat]);
+                            }
+                            
+                            // If that failed, try other mips
+                            if (!texture && txtr->mipArray.size() > 1) {
+                                for (int mipIdx = static_cast<int>(txtr->mipArray.size()) - 2; mipIdx >= 0; --mipIdx) {
+                                    const auto& mip = txtr->mipArray[mipIdx];
+                                    if (mip.isLoaded) {
+                                        texture = CreateTextureFromMip(entry.asset, &mip, s_PakToDxgiFormat[txtr->imgFormat]);
+                                        if (texture) break;
+                                    }
+                                }
+                            }
+                            
+                            if (texture) {
+                                ID3D11ShaderResourceView* srv = texture->GetSRV();
+                                if (srv) {
+                                    // Always bind to register t0 for the main texture (albedo/diffuse)
+                                    context->PSSetShaderResources(0, 1u, &srv);
+                                    texturesBound++;
+                                    break; // Use the first valid texture for now
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // If no textures bound, bind a white dummy texture or let shader handle it
+                if (texturesBound == 0) {
+                    // Create a simple 1x1 white texture as fallback
+                    D3D11_TEXTURE2D_DESC texDesc = {};
+                    texDesc.Width = 1;
+                    texDesc.Height = 1;
+                    texDesc.MipLevels = 1;
+                    texDesc.ArraySize = 1;
+                    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                    texDesc.SampleDesc.Count = 1;
+                    texDesc.Usage = D3D11_USAGE_DEFAULT;
+                    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+                    
+                    uint32_t whitePixel = 0xFFFFFFFF; // White pixel
+                    initData = {};
+                    initData.pSysMem = &whitePixel;
+                    initData.SysMemPitch = 4;
+                    
+                    ID3D11Texture2D* whiteTex = nullptr;
+                    ID3D11ShaderResourceView* whiteSRV = nullptr;
+                    
+                    if (SUCCEEDED(g_dxHandler->GetDevice()->CreateTexture2D(&texDesc, &initData, &whiteTex))) {
+                        if (SUCCEEDED(g_dxHandler->GetDevice()->CreateShaderResourceView(whiteTex, nullptr, &whiteSRV))) {
+                            context->PSSetShaderResources(0, 1u, &whiteSRV);
+                        }
+                        if (whiteSRV) whiteSRV->Release();
+                        if (whiteTex) whiteTex->Release();
+                    }
+                }
+                
+                // Draw the sphere
+                context->DrawIndexed(m_materialSphereState.indexCount, 0u, 0u);
+                
+                transformBuffer->Release();
+            }
+        }
+        
+        // Restore original render targets and viewport
+        context->OMSetRenderTargets(1, &originalRTV, originalDSV);
+        context->RSSetViewports(1, &originalViewport);
+        
+        if (originalRTV) originalRTV->Release();
+        if (originalDSV) originalDSV->Release();
     }
 }
 
