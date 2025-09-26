@@ -5,6 +5,7 @@
 #include <thirdparty/imgui/backends/imgui_impl_win32.h>
 
 #include <core/window.h>
+#include <core/utils/exportsettings.h>
 
 #include <thirdparty/directxtex/DirectXTex.h>
 
@@ -343,21 +344,27 @@ bool CTexture::IsValid32bppFormat()
 // Roll: rotation.z
 void CDXCamera::AddRotation(float yaw, float pitch, float roll)
 {
+    // Ignore roll completely
+    UNUSED(roll);
+    
+    // Apply yaw (horizontal rotation) around world Y-axis
     rotation.y += yaw;
-    if (rotation.y > (XM_PI))
+    if (rotation.y > XM_PI)
         rotation.y -= 2.f * XM_PI;
-
-    if (rotation.y < (-XM_PI))
+    if (rotation.y < -XM_PI)
         rotation.y += 2.f * XM_PI;
 
-    rotation.x = std::clamp(rotation.x + pitch, -DEG2RAD(90), DEG2RAD(90));
+    // Apply pitch (vertical rotation) around local X-axis, clamped to prevent gimbal lock
+    rotation.x = std::clamp(rotation.x + pitch, -DEG2RAD(89.9f), DEG2RAD(89.9f));
 
-    rotation.z += roll;
+    // Always keep roll at zero for FPS-style camera
+    rotation.z = 0.0f;
 }
 
 XMMATRIX CDXCamera::GetViewMatrix()
 {
-    const XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(rotation.x, rotation.y, rotation.z);
+    // Use the standard rotation but ensure roll is always 0
+    const XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(rotation.x, rotation.y, 0.0f);
 
     target = XMVector3TransformCoord(XMVectorSet(0, 0, 1, 0), rotMatrix);
     up = XMVector3TransformCoord(XMVectorSet(0, 1, 0, 0), rotMatrix);
@@ -887,6 +894,35 @@ void CDXCamera::UpdateCommonCameraData()
 
     data.c_cameraLenY = 1.f;
     data.c_cameraRcpLenY = 1.f / data.c_cameraLenY;
+
+    // Initialize shadow system
+    data.c_sunDir = { 0.5f, -1.0f, 0.3f }; // Sun direction from above-right
+    // Normalize the sun direction
+    float sunDirLen = sqrt(data.c_sunDir.x * data.c_sunDir.x +
+                          data.c_sunDir.y * data.c_sunDir.y +
+                          data.c_sunDir.z * data.c_sunDir.z);
+    data.c_sunDir.x /= sunDirLen;
+    data.c_sunDir.y /= sunDirLen;
+    data.c_sunDir.z /= sunDirLen;
+
+    // Enable shadows based on UI setting (safe implementation without ADVANCED_MODEL_PREVIEW)
+    data.c_csm.enableShadows = g_PreviewSettings.enableShadows;
+
+    // Initialize basic CSM constants (simplified for basic shadow support)
+    data.c_csm.shadowRelConst = { 1.0f, 1.0f, 1.0f };
+    data.c_csm.cascade3LogicData = 0;
+    data.c_csm.shadowRelForX = { 1.0f, 0.0f, 0.0f };
+    data.c_csm.cascadeWeightScale = 1.0f;
+    data.c_csm.shadowRelForY = { 0.0f, 1.0f, 0.0f };
+    data.c_csm.cascadeWeightBias = 0.0f;
+    data.c_csm.shadowRelForZ = { 0.0f, 0.0f, 1.0f };
+
+    // Initialize basic lighting parameters for model shader
+    data.c_sunIntensity = 1.2f;
+    data.c_ambientIntensity = 0.4f;
+    data.c_ambientColor = { 0.3f, 0.35f, 0.4f }; // Soft blue-ish ambient
+    data.c_specularPower = 32.0f;
+    data.c_enableLighting = g_PreviewSettings.enableShadows ? 1.0f : 0.0f; // Use shadows checkbox to enable lighting
 }
 
 void CDXCamera::CommitCameraDataBufferUpdates()

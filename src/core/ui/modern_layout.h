@@ -138,6 +138,11 @@ namespace ModernUI
         void RenderMaterialSphereToTexture(const void* material);
         void RenderMaterialViewer(CAsset* materialAsset);
         void RenderModel3DViewport();
+
+        // Skybox functions
+        bool CreateSkyboxResources();
+        void DestroySkyboxResources();
+        void RenderSkybox(ID3D11DeviceContext* context);
         
         // UI State
         bool m_panelVisible[8]; // One for each PanelType (updated for MaterialPreview)
@@ -166,6 +171,8 @@ namespace ModernUI
             float autoRotateSpeed = 0.5f;
             Vector cameraPosition = {0, 0, -5};
             Vector cameraRotation = {0, 0, 0};
+            float cameraFOV = 75.0f;  // Field of view in degrees
+            float skyboxScale = 50.0f; // Skybox cube size
             
             // Render-to-texture resources
             ID3D11Texture2D* renderTexture = nullptr;
@@ -175,6 +182,13 @@ namespace ModernUI
             ID3D11DepthStencilView* depthStencilView = nullptr;
             int renderWidth = 800;
             int renderHeight = 600;
+
+            // Skybox resources
+            ID3D11Texture2D* skyboxTexture = nullptr;
+            ID3D11ShaderResourceView* skyboxSRV = nullptr;
+            ID3D11Buffer* skyboxVertexBuffer = nullptr;
+            ID3D11Buffer* skyboxIndexBuffer = nullptr;
+            UINT skyboxIndexCount = 0;
         } m_modelViewerState;
         
         // Material Sphere Preview State

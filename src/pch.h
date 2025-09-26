@@ -107,4 +107,4 @@
 //#define XB_XECRPYT
 //#define XB_XCOMPRESS
 #define SWITCH_SWIZZLE
-//#define ADVANCED_MODEL_PREVIEW
+//#define ADVANCED_MODEL_PREVIEW  // Disabled - causes crashes and invisible models

@@ -181,9 +181,16 @@ struct CBufCommonPerCamera
     float c_cameraRcpLenY;
     int c_debugInt;
     float c_debugFloat;
-    float3 unused;
+
+    // Basic lighting parameters for model shader
+    float c_sunIntensity;
+    float c_ambientIntensity;
+    float3 c_ambientColor;
+    float c_specularPower;
+    float c_enableLighting;
+    float2 unused;
 };
-static_assert(sizeof(CBufCommonPerCamera) == 752);
+static_assert(sizeof(CBufCommonPerCamera) == 784); // Updated for lighting parameters (752 + 32)
 
 struct CBufModelInstance
 {
@@ -327,6 +334,7 @@ public:
     };
 
     inline const XMMATRIX& GetProjMatrix() { return m_wndProjMatrix; };
+    inline void SetProjMatrix(const XMMATRIX& matrix) { m_wndProjMatrix = matrix; };
 
     inline CDXShaderManager* GetShaderManager() const { return m_pShaderManager; };
 

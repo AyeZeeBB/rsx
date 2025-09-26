@@ -78,4 +78,5 @@ struct PreviewSettings_t
 {
     float previewCullDistance; // currently can only be set on load, which is not ideal
     float previewMovementSpeed;
+    bool enableShadows = false; // Enable shadow rendering in 3D preview
 };

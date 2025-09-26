@@ -419,7 +419,7 @@ void PostLoadShaderAsset(CAssetContainer* const pak, CAsset* const asset)
 
 	}
 
-#if defined(ADVANCED_MODEL_PREVIEW) // saves some memory and loading time if we don't create these when AMP is not enabled
+	// Always create D3D11 shader objects for better material rendering (not just with ADVANCED_MODEL_PREVIEW)
 	HRESULT hr = E_INVALIDARG;
 
 	switch (shaderAsset->type)
@@ -461,9 +461,8 @@ void PostLoadShaderAsset(CAssetContainer* const pak, CAsset* const asset)
 
 	if (FAILED(hr))
 	{
-		Log("failed to create %s shader for asset %s (0x%08X)\n", GetShaderTypeName(shaderAsset->type), asset->name().c_str(), hr);
+		Log("failed to create %s shader for asset %s (0x%08X)\n", GetShaderTypeName(shaderAsset->type), asset->GetAssetName().c_str(), hr);
 	}
-#endif
 
 	if(!shaderAsset->name)
 		pakAsset->SetAssetNameFromCache();

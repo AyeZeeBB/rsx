@@ -2959,7 +2959,7 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 
 		const MaterialAsset* const matl = reinterpret_cast<MaterialAsset*>(matlAsset->extraData());
 
-#if defined(ADVANCED_MODEL_PREVIEW)
+		// Always load material shaders for better rendering (not just with ADVANCED_MODEL_PREVIEW)
 		if (matl->shaderSetAsset)
 		{
 			ShaderSetAsset* const shaderSet = reinterpret_cast<ShaderSetAsset*>(matl->shaderSetAsset->extraData());
@@ -2975,7 +2975,6 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 				meshDrawData->inputLayout = vertexShader->vertexInputLayout;
 			}
 		}
-#endif
 
 		if ((meshDrawData->textures.size() == 0 || info->lastSelectedSkinIndex != info->selectedSkinIndex) && matl)
 		{
@@ -3040,7 +3039,7 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 
 	// sub_18001FB40 in r2
 	XMMATRIX modelMatrix = {};
-	memcpy(&modelMatrix, &modelAsset->bones[0].poseToBone, sizeof(ModelBone_t::poseToBone));
+	memcpy(&modelMatrix, &parsedData->bones[0].poseToBone, sizeof(ModelBone_t::poseToBone));
 
 	modelMatrix.r[3].m128_f32[3] = 1.f;
 

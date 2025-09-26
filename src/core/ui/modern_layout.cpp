@@ -4,7 +4,11 @@
 #include <core/render.h>
 #include <core/window.h>
 #include <core/utils/utils_general.h>
+#include <core/utils/exportsettings.h>
 #include <thirdparty/imgui/misc/imgui_utility.h>
+#include <thirdparty/directxtex/DirectXTex.h>
+#include <DirectXMath.h>
+#include <cmath>
 #include <algorithm>
 #include <functional>
 #include <sstream>
@@ -63,12 +67,16 @@ namespace ModernUI
         DestroyModelViewerRenderTarget();
         DestroyMaterialSphereRenderTarget();
         DestroySphereGeometry();
+        DestroySkyboxResources();
     }
 
     void LayoutManager::Initialize()
     {
         ApplyModernStyle();
         RefreshAssetTree();
+
+        // Initialize skybox resources
+        CreateSkyboxResources();
     }
 
     void LayoutManager::Render()
@@ -2277,6 +2285,10 @@ namespace ModernUI
         ImGui::SliderFloat("Speed", &m_modelViewerState.cameraSpeed, 0.1f, 10.0f, "%.1f");
         ImGui::SameLine();
         
+        ImGui::SetNextItemWidth(100);
+        ImGui::SliderFloat("FOV", &m_modelViewerState.cameraFOV, 30.0f, 120.0f, "%.0f°");
+        ImGui::SameLine();
+        
         if (ImGui::Button("Reset Cam"))
         {
             if (g_dxHandler && g_dxHandler->GetCamera())
@@ -2337,9 +2349,10 @@ namespace ModernUI
             }
         }
         
-        // Update camera speed
+        // Update camera speed and shadow settings
         if (g_dxHandler) {
             g_PreviewSettings.previewMovementSpeed = m_modelViewerState.cameraSpeed * 50.0f;
+            g_PreviewSettings.enableShadows = m_modelViewerState.showShadows;
         }
         
         bool isViewportHovered = false;
@@ -2653,14 +2666,25 @@ namespace ModernUI
         // Render the 3D model (copied from main render loop)
         CDXCamera* camera = g_dxHandler->GetCamera();
         
+        // Update projection matrix with FOV setting
+        float aspectRatio = static_cast<float>(m_modelViewerState.renderWidth) / static_cast<float>(m_modelViewerState.renderHeight);
+        float fovRadians = DirectX::XMConvertToRadians(m_modelViewerState.cameraFOV);
+        XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveFovLH(fovRadians, aspectRatio, 0.1f, 1000.0f);
+        g_dxHandler->SetProjMatrix(projMatrix);
+        
         // Update camera data
         camera->CommitCameraDataBufferUpdates();
         
+        // Render skybox if enabled
+        if (m_modelViewerState.showSkybox) {
+            RenderSkybox(context);
+        }
+
         // Render grid floor if enabled
         if (m_modelViewerState.showGridFloor) {
             RenderGridFloor(context, camera);
         }
-        
+
         // Setup enhanced lighting system
         if (m_modelViewerState.showLighting) {
             CDXScene& scene = g_dxHandler->GetScene();
@@ -2806,7 +2830,7 @@ namespace ModernUI
                     context->PSSetConstantBuffers(2u, 2, sharedConstBuffers);
                     
                     #if defined(ADVANCED_MODEL_PREVIEW)
-                    scene.BindLightsSRV(context);
+                    g_dxHandler->GetScene().BindLightsSRV(context);
                     #endif
                 }
                 else
@@ -4160,6 +4184,429 @@ void LayoutManager::RenderMaterialSpherePreview(const void* materialData, CAsset
                 }
                 break;
         }
+    }
+}
+
+bool ModernUI::LayoutManager::CreateSkyboxResources()
+{
+    if (!g_dxHandler) return false;
+
+    ID3D11Device* device = g_dxHandler->GetDevice();
+    if (!device) return false;
+
+    // Create skybox cube geometry
+    struct SkyboxVertex {
+        float x, y, z;    // Position only (no UV needed for cubemap)
+    };
+
+    // Cube vertices for skybox (large cube)
+    const float size = m_modelViewerState.skyboxScale;
+    SkyboxVertex vertices[] = {
+        // Front face
+        {-size, -size,  size}, { size, -size,  size}, { size,  size,  size}, {-size,  size,  size},
+        // Back face
+        {-size, -size, -size}, {-size,  size, -size}, { size,  size, -size}, { size, -size, -size},
+        // Top face
+        {-size,  size, -size}, {-size,  size,  size}, { size,  size,  size}, { size,  size, -size},
+        // Bottom face
+        {-size, -size, -size}, { size, -size, -size}, { size, -size,  size}, {-size, -size,  size},
+        // Right face
+        { size, -size, -size}, { size,  size, -size}, { size,  size,  size}, { size, -size,  size},
+        // Left face
+        {-size, -size, -size}, {-size, -size,  size}, {-size,  size,  size}, {-size,  size, -size}
+    };
+
+    // Indices for cube (inward facing)
+    UINT indices[] = {
+        0,  2,  1,   0,  3,  2,   // Front (reversed)
+        4,  6,  5,   4,  7,  6,   // Back (reversed)
+        8, 10,  9,   8, 11, 10,   // Top (reversed)
+        12, 14, 13,  12, 15, 14,  // Bottom (reversed)
+        16, 18, 17,  16, 19, 18,  // Right (reversed)
+        20, 22, 21,  20, 23, 22   // Left (reversed)
+    };
+
+    m_modelViewerState.skyboxIndexCount = ARRAYSIZE(indices);
+    Log("Created skybox cube: %zu vertices, %zu indices\n", ARRAYSIZE(vertices), ARRAYSIZE(indices));
+
+    // Create vertex buffer
+    D3D11_BUFFER_DESC vbDesc = {};
+    vbDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    vbDesc.ByteWidth = sizeof(vertices);
+    vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+
+    D3D11_SUBRESOURCE_DATA vbData = {};
+    vbData.pSysMem = vertices;
+
+    HRESULT hr = device->CreateBuffer(&vbDesc, &vbData, &m_modelViewerState.skyboxVertexBuffer);
+    if (FAILED(hr)) return false;
+
+    // Create index buffer
+    D3D11_BUFFER_DESC ibDesc = {};
+    ibDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    ibDesc.ByteWidth = sizeof(indices);
+    ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+    D3D11_SUBRESOURCE_DATA ibData = {};
+    ibData.pSysMem = indices;
+
+    hr = device->CreateBuffer(&ibDesc, &ibData, &m_modelViewerState.skyboxIndexBuffer);
+    if (FAILED(hr)) return false;
+
+    // Load cubemap from individual face files
+    std::string basePath = "cubemap\\";
+    std::vector<std::string> faceFiles = { "px.png", "nx.png", "py.png", "ny.png", "pz.png", "nz.png" };
+
+    Log("Loading cubemap from: %s\n", basePath.c_str());
+
+    // Load all face images
+    std::vector<DirectX::ScratchImage> faceImages(6);
+    UINT width = 0, height = 0;
+    bool allFacesLoaded = true;
+
+    for (int face = 0; face < 6; ++face) {
+        std::string filePath = basePath + faceFiles[face];
+        std::wstring wFilePath(filePath.begin(), filePath.end());
+
+        hr = DirectX::LoadFromWICFile(wFilePath.c_str(), DirectX::WIC_FLAGS_FORCE_RGB, nullptr, faceImages[face]);
+        if (FAILED(hr)) {
+            Log("Failed to load skybox face: %s (HRESULT: 0x%08X)\n", filePath.c_str(), hr);
+            allFacesLoaded = false;
+            break;
+        }
+
+        // Get dimensions from first successfully loaded image
+        if (width == 0) {
+            const DirectX::TexMetadata& metadata = faceImages[face].GetMetadata();
+            width = static_cast<UINT>(metadata.width);
+            height = static_cast<UINT>(metadata.height);
+            Log("Loaded skybox face %s: %dx%d, format: %d\n", faceFiles[face].c_str(), width, height, (int)metadata.format);
+        }
+    }
+
+    if (!allFacesLoaded || width == 0) {
+        Log("Failed to load all cubemap faces, creating fallback colored cubemap\n");
+        
+        // Create fallback colored cubemap
+        width = height = 512;
+        uint32_t colors[6] = {
+            0xFF0000FF, // +X = Red
+            0xFF00FF00, // -X = Green
+            0xFFFF0000, // +Y = Blue
+            0xFFFFFF00, // -Y = Cyan
+            0xFFFF00FF, // +Z = Magenta
+            0xFF00FFFF  // -Z = Yellow
+        };
+
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 6;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_IMMUTABLE;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        desc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+
+        std::vector<uint32_t> faceData(width * height);
+        std::vector<D3D11_SUBRESOURCE_DATA> subresources(6);
+
+        for (int face = 0; face < 6; ++face) {
+            std::fill(faceData.begin(), faceData.end(), colors[face]);
+            subresources[face].pSysMem = faceData.data();
+            subresources[face].SysMemPitch = width * 4;
+            subresources[face].SysMemSlicePitch = 0;
+        }
+
+        hr = device->CreateTexture2D(&desc, subresources.data(), &m_modelViewerState.skyboxTexture);
+        if (FAILED(hr)) return false;
+        
+        Log("Created fallback colored cubemap\n");
+    }
+    else {
+        // Create cubemap from loaded images
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 6;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_IMMUTABLE;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        desc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+
+        std::vector<D3D11_SUBRESOURCE_DATA> subresources(6);
+
+        for (int face = 0; face < 6; ++face) {
+            const DirectX::Image* img = faceImages[face].GetImage(0, 0, 0);
+            subresources[face].pSysMem = img->pixels;
+            subresources[face].SysMemPitch = static_cast<UINT>(img->rowPitch);
+            subresources[face].SysMemSlicePitch = static_cast<UINT>(img->slicePitch);
+        }
+
+        hr = device->CreateTexture2D(&desc, subresources.data(), &m_modelViewerState.skyboxTexture);
+        if (FAILED(hr)) return false;
+
+        Log("Successfully loaded cubemap (%dx%d) with %d faces\n", width, height, 6);
+    }
+
+    // Create shader resource view for cubemap
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_UNKNOWN; // Let D3D11 choose the format based on the texture
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+    srvDesc.TextureCube.MipLevels = static_cast<UINT>(-1); // Use all mip levels
+    srvDesc.TextureCube.MostDetailedMip = 0;
+
+    hr = device->CreateShaderResourceView(m_modelViewerState.skyboxTexture, &srvDesc, &m_modelViewerState.skyboxSRV);
+    if (FAILED(hr)) {
+        Log("Failed to create skybox SRV with custom descriptor (HRESULT: 0x%08X), trying default...\n", hr);
+        
+        // Try with default descriptor (nullptr)
+        hr = device->CreateShaderResourceView(m_modelViewerState.skyboxTexture, nullptr, &m_modelViewerState.skyboxSRV);
+        if (FAILED(hr)) {
+            Log("Failed to create skybox SRV with default descriptor (HRESULT: 0x%08X)\n", hr);
+            return false;
+        }
+        Log("Successfully created skybox SRV with default descriptor\n");
+    }
+
+    Log("Skybox resources created successfully - SRV: %p\n", m_modelViewerState.skyboxSRV);
+    return true;
+}
+
+void ModernUI::LayoutManager::DestroySkyboxResources()
+{
+    if (m_modelViewerState.skyboxSRV) {
+        m_modelViewerState.skyboxSRV->Release();
+        m_modelViewerState.skyboxSRV = nullptr;
+    }
+    if (m_modelViewerState.skyboxTexture) {
+        m_modelViewerState.skyboxTexture->Release();
+        m_modelViewerState.skyboxTexture = nullptr;
+    }
+    if (m_modelViewerState.skyboxVertexBuffer) {
+        m_modelViewerState.skyboxVertexBuffer->Release();
+        m_modelViewerState.skyboxVertexBuffer = nullptr;
+    }
+    if (m_modelViewerState.skyboxIndexBuffer) {
+        m_modelViewerState.skyboxIndexBuffer->Release();
+        m_modelViewerState.skyboxIndexBuffer = nullptr;
+    }
+}
+
+void ModernUI::LayoutManager::RenderSkybox(ID3D11DeviceContext* context)
+{
+    if (!m_modelViewerState.skyboxSRV || !m_modelViewerState.skyboxVertexBuffer || !m_modelViewerState.skyboxIndexBuffer) {
+        Log("Skybox render failed - missing resources: SRV=%p, VB=%p, IB=%p\n", 
+            m_modelViewerState.skyboxSRV, m_modelViewerState.skyboxVertexBuffer, m_modelViewerState.skyboxIndexBuffer);
+        return;
+    }
+
+    // Load skybox shaders
+    const char* skyboxVertexShader = R"(
+struct VS_Input
+{
+    float3 position : POSITION;
+};
+
+struct VS_Output
+{
+    float4 position : SV_POSITION;
+    float3 texCoord : TEXCOORD0;
+};
+
+cbuffer VS_TransformConstants : register(b0)
+{
+    float4x4 modelMatrix;
+    float4x4 viewMatrix;
+    float4x4 projectionMatrix;
+};
+
+VS_Output vs_main(VS_Input input)
+{
+    VS_Output output;
+
+    // Create rotation-only view matrix by explicitly removing translation
+    float4x4 rotationOnlyView = viewMatrix;
+    rotationOnlyView[3][0] = 0.0f; // Remove X translation
+    rotationOnlyView[3][1] = 0.0f; // Remove Y translation  
+    rotationOnlyView[3][2] = 0.0f; // Remove Z translation
+    rotationOnlyView[3][3] = 1.0f; // Keep W as 1
+    
+    // Transform the skybox position (scale it up for the large sphere)
+    float4 scaledPos = mul(float4(input.position, 1.0), modelMatrix);
+    
+    // Apply rotation-only view matrix
+    float4 viewPos = mul(scaledPos, rotationOnlyView);
+    
+    // Apply projection matrix
+    output.position = mul(viewPos, projectionMatrix);
+
+    // Set z = w to ensure the skybox is rendered at maximum depth
+    output.position.z = output.position.w;
+
+    // Use the local position as texture coordinates for the cubemap
+    output.texCoord = input.position;
+
+    return output;
+}
+)";
+
+    const char* skyboxPixelShader = R"(
+struct VS_Output
+{
+    float4 position : SV_POSITION;
+    float3 texCoord : TEXCOORD0;
+};
+
+TextureCube skyboxTexture : register(t0);
+SamplerState skyboxSampler : register(s0);
+
+float4 ps_main(VS_Output input) : SV_Target
+{
+    // Sample the cubemap using the 3D texture coordinate
+    return skyboxTexture.Sample(skyboxSampler, input.texCoord);
+}
+)";
+
+    CShader* vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("skybox_sphere_vs", skyboxVertexShader, eShaderType::Vertex);
+    CShader* pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("skybox_sphere_ps", skyboxPixelShader, eShaderType::Pixel);
+
+    // Set shaders
+    context->VSSetShader(vertexShader->Get<ID3D11VertexShader>(), nullptr, 0);
+    context->PSSetShader(pixelShader->Get<ID3D11PixelShader>(), nullptr, 0);
+    context->IASetInputLayout(vertexShader->GetInputLayout());
+
+    // Set transform constants - create identity transform for skybox
+    VS_TransformConstants transforms = {};
+
+    // Identity model matrix
+    transforms.modelMatrix = DirectX::XMMatrixIdentity();
+
+    // Get view matrix from camera and create projection matrix
+    CDXCamera* camera = g_dxHandler->GetCamera();
+    if (camera) {
+        transforms.viewMatrix = camera->GetViewMatrix();
+
+        // Create projection matrix using FIXED FOV for skybox (75 degrees)
+        float aspectRatio = static_cast<float>(m_modelViewerState.renderWidth) / static_cast<float>(m_modelViewerState.renderHeight);
+        float fixedFovRadians = DirectX::XMConvertToRadians(120.0f); // Fixed FOV for skybox
+        transforms.projectionMatrix = DirectX::XMMatrixPerspectiveFovLH(fixedFovRadians, aspectRatio, 0.1f, 100.0f);
+    }
+
+    // Create temporary constant buffer for skybox transforms
+    D3D11_BUFFER_DESC cbDesc = {};
+    cbDesc.ByteWidth = sizeof(VS_TransformConstants);
+    cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+    D3D11_SUBRESOURCE_DATA cbData = {};
+    cbData.pSysMem = &transforms;
+
+    ID3D11Buffer* transformBuffer = nullptr;
+    HRESULT hrTransform = g_dxHandler->GetDevice()->CreateBuffer(&cbDesc, &cbData, &transformBuffer);
+    if (SUCCEEDED(hrTransform)) {
+        context->VSSetConstantBuffers(0u, 1u, &transformBuffer);
+        transformBuffer->Release();
+    }
+
+    // Set skybox texture and sampler
+    context->PSSetShaderResources(0u, 1u, &m_modelViewerState.skyboxSRV);
+    
+    // Create a clamp sampler for cubemap sampling
+    D3D11_SAMPLER_DESC samplerDesc = {};
+    samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    samplerDesc.MinLOD = 0;
+    samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+    
+    ID3D11SamplerState* skyboxSampler = nullptr;
+    HRESULT hrSampler = g_dxHandler->GetDevice()->CreateSamplerState(&samplerDesc, &skyboxSampler);
+    if (SUCCEEDED(hrSampler)) {
+        context->PSSetSamplers(0u, 1u, &skyboxSampler);
+    } else {
+        // Fallback to default sampler
+        ID3D11SamplerState* samplerState = g_dxHandler->GetSamplerState();
+        context->PSSetSamplers(0u, 1u, &samplerState);
+    }
+
+    // Set vertex buffer (position only = 3 floats)
+    UINT stride = sizeof(float) * 3;
+    UINT offset = 0u;
+    context->IASetVertexBuffers(0u, 1u, &m_modelViewerState.skyboxVertexBuffer, &stride, &offset);
+    context->IASetIndexBuffer(m_modelViewerState.skyboxIndexBuffer, DXGI_FORMAT_R32_UINT, 0u);
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    // Save current rasterizer state
+    ID3D11RasterizerState* originalRasterizerState = nullptr;
+    context->RSGetState(&originalRasterizerState);
+
+    // Create and set skybox rasterizer state (no culling for interior faces)
+    D3D11_RASTERIZER_DESC skyboxRasterizerDesc = {};
+    skyboxRasterizerDesc.FillMode = D3D11_FILL_SOLID;
+    skyboxRasterizerDesc.CullMode = D3D11_CULL_NONE; // No culling so we can see interior faces
+    skyboxRasterizerDesc.FrontCounterClockwise = FALSE;
+    skyboxRasterizerDesc.DepthBias = 0;
+    skyboxRasterizerDesc.DepthBiasClamp = 0.0f;
+    skyboxRasterizerDesc.SlopeScaledDepthBias = 0.0f;
+    skyboxRasterizerDesc.DepthClipEnable = TRUE;
+    skyboxRasterizerDesc.ScissorEnable = FALSE;
+    skyboxRasterizerDesc.MultisampleEnable = FALSE;
+    skyboxRasterizerDesc.AntialiasedLineEnable = FALSE;
+
+    ID3D11RasterizerState* skyboxRasterizerState = nullptr;
+    HRESULT hrRasterizer = g_dxHandler->GetDevice()->CreateRasterizerState(&skyboxRasterizerDesc, &skyboxRasterizerState);
+    if (SUCCEEDED(hrRasterizer)) {
+        context->RSSetState(skyboxRasterizerState);
+    }
+
+    // Save current depth stencil state
+    ID3D11DepthStencilState* originalDepthState = nullptr;
+    UINT originalStencilRef = 0;
+    context->OMGetDepthStencilState(&originalDepthState, &originalStencilRef);
+
+    // Create and set skybox depth state (depth test enabled, depth write disabled)
+    D3D11_DEPTH_STENCIL_DESC skyboxDepthDesc = {};
+    skyboxDepthDesc.DepthEnable = TRUE;
+    skyboxDepthDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO; // Don't write to depth buffer
+    skyboxDepthDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL; // Less or equal for skybox at far plane
+    skyboxDepthDesc.StencilEnable = FALSE;
+
+    ID3D11DepthStencilState* skyboxDepthState = nullptr;
+    HRESULT hrDepth = g_dxHandler->GetDevice()->CreateDepthStencilState(&skyboxDepthDesc, &skyboxDepthState);
+    if (SUCCEEDED(hrDepth)) {
+        context->OMSetDepthStencilState(skyboxDepthState, 1);
+    }
+
+    // Draw skybox
+    context->DrawIndexed(m_modelViewerState.skyboxIndexCount, 0u, 0u);
+
+    // Clean up skybox sampler
+    if (skyboxSampler) {
+        skyboxSampler->Release();
+    }
+
+    // Restore original states
+    if (originalRasterizerState) {
+        context->RSSetState(originalRasterizerState);
+        originalRasterizerState->Release();
+    }
+    if (skyboxRasterizerState) {
+        skyboxRasterizerState->Release();
+    }
+    
+    if (originalDepthState) {
+        context->OMSetDepthStencilState(originalDepthState, originalStencilRef);
+        originalDepthState->Release();
+    }
+    if (skyboxDepthState) {
+        skyboxDepthState->Release();
     }
 }
 
