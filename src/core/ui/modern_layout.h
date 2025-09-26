@@ -24,6 +24,7 @@ namespace ModernUI
         Viewport3D,
         ModelViewer3D,      // New dedicated 3D model viewer
         AssetPreview,
+        MaterialPreview,    // New dedicated material sphere preview
         Properties,
         Console
     };
@@ -76,6 +77,7 @@ namespace ModernUI
         void RenderViewport3D();
         void RenderModelViewer3D();    // New dedicated 3D model viewer
         void RenderAssetPreview();
+        void RenderMaterialPreview();  // New dedicated material sphere preview
         void RenderProperties();
         void RenderConsole();
         
@@ -107,7 +109,7 @@ namespace ModernUI
         void RenderModel3DViewport();
         
         // UI State
-        bool m_panelVisible[7]; // One for each PanelType (updated for ModelViewer3D)
+        bool m_panelVisible[8]; // One for each PanelType (updated for MaterialPreview)
         std::vector<CAsset*> m_selectedAssets;
         AssetTreeNode m_assetTreeRoot;
         bool m_showAssetTreeView = true;

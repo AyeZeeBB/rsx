@@ -48,7 +48,7 @@ namespace ModernUI
     LayoutManager::LayoutManager()
     {
         // Initialize all panels as visible except console
-        for (int i = 0; i < 7; ++i)  // Updated for ModelViewer3D
+        for (int i = 0; i < 8; ++i)  // Updated for MaterialPreview
         {
             m_panelVisible[i] = true;
         }
@@ -234,6 +234,7 @@ namespace ModernUI
                 ImGui::MenuItem("3D Viewport", nullptr, &m_panelVisible[static_cast<int>(PanelType::Viewport3D)]);
                 ImGui::MenuItem("3D Model Viewer (Center)", nullptr, &m_panelVisible[static_cast<int>(PanelType::ModelViewer3D)]);
                 ImGui::MenuItem("Asset Preview", nullptr, &m_panelVisible[static_cast<int>(PanelType::AssetPreview)]);
+                ImGui::MenuItem("Material Preview", nullptr, &m_panelVisible[static_cast<int>(PanelType::MaterialPreview)]);
                 ImGui::MenuItem("Properties", nullptr, &m_panelVisible[static_cast<int>(PanelType::Properties)]);
                 ImGui::MenuItem("Console", nullptr, &m_panelVisible[static_cast<int>(PanelType::Console)]);
                 ImGui::Separator();
@@ -331,22 +332,42 @@ namespace ModernUI
 
                 if (ImGui::BeginChild("CenterArea", ImVec2(centerWidth, 0), false))
                 {
-                    // Priority order: ModelViewer3D > Viewport3D > AssetPreview
-                    if (m_panelVisible[static_cast<int>(PanelType::ModelViewer3D)])
+                    // Check if we should show MaterialPreview (only when enabled AND material selected)
+                    bool shouldShowMaterialPreview = false;
+                    if (m_panelVisible[static_cast<int>(PanelType::MaterialPreview)] && !m_selectedAssets.empty()) {
+                        CAsset* firstAsset = m_selectedAssets[0];
+                        if (firstAsset) {
+                            try {
+                                uint32_t assetType = firstAsset->GetAssetType();
+                                if (assetType == 0x6C74616D) { // 'matl' - Material type
+                                    shouldShowMaterialPreview = true;
+                                }
+                            } catch (...) {
+                                // Asset type couldn't be read
+                            }
+                        }
+                    }
+
+                    // Priority order: MaterialPreview (when material selected) > ModelViewer3D > Viewport3D > AssetPreview
+                    if (shouldShowMaterialPreview)
+                    {
+                        RenderMaterialPreview();
+                    }
+                    else if (m_panelVisible[static_cast<int>(PanelType::ModelViewer3D)])
                     {
                         // Check if we have texture/material selected first
                         bool hasTextureSelected = false;
                         bool hasMaterialSelected = false;
                         CAsset* textureAsset = nullptr;
                         CAsset* materialAsset = nullptr;
-                        
+
                         if (!m_selectedAssets.empty()) {
                             CAsset* firstAsset = m_selectedAssets[0];
                             if (firstAsset) {
                                 try {
                                     uint32_t assetType = firstAsset->GetAssetType();
                                     // Check for texture types: 'rtxt' (0x72747874) or 'txtr' (0x74787472)
-                                    if (assetType == 0x72747874 || assetType == 0x74787472) { 
+                                    if (assetType == 0x72747874 || assetType == 0x74787472) {
                                         hasTextureSelected = true;
                                         textureAsset = firstAsset;
                                     }
@@ -360,13 +381,13 @@ namespace ModernUI
                                 }
                             }
                         }
-                        
+
                         if (hasTextureSelected && textureAsset) {
                             // Show texture viewer instead of 3D model viewer
                             RenderTextureViewer(textureAsset);
                         }
-                        else if (hasMaterialSelected && materialAsset) {
-                            // Show material viewer instead of 3D model viewer
+                        else if (hasMaterialSelected && materialAsset && !m_panelVisible[static_cast<int>(PanelType::MaterialPreview)]) {
+                            // Show material viewer instead of 3D model viewer (only if MaterialPreview panel is disabled)
                             RenderMaterialViewer(materialAsset);
                         }
                         else {
@@ -1267,6 +1288,78 @@ namespace ModernUI
             }
         }
         
+        ImGui::Unindent(8.0f);
+        ImGui::Spacing();
+    }
+
+    void LayoutManager::RenderMaterialPreview()
+    {
+        // Add manual padding
+        ImGui::Spacing();
+        ImGui::Indent(8.0f);
+
+        // Check if we have a material selected
+        bool hasMaterialSelected = false;
+        CAsset* materialAsset = nullptr;
+
+        if (!m_selectedAssets.empty()) {
+            CAsset* firstAsset = m_selectedAssets[0];
+            if (firstAsset) {
+                try {
+                    uint32_t assetType = firstAsset->GetAssetType();
+                    // Check for material type: 'matl' (0x6C74616D)
+                    if (assetType == 0x6C74616D) {
+                        hasMaterialSelected = true;
+                        materialAsset = firstAsset;
+                    }
+                } catch (...) {
+                    // Asset type couldn't be read
+                }
+            }
+        }
+
+        if (!hasMaterialSelected || !materialAsset) {
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 0.6f), "Select a material to preview it here");
+            ImGui::Unindent(8.0f);
+            ImGui::Spacing();
+            return;
+        }
+
+        // Split the area: Material details on top, sphere preview on bottom
+        const float totalHeight = ImGui::GetContentRegionAvail().y;
+        const float materialViewerHeight = totalHeight * 0.6f; // 60% for material details
+        //const float spherePreviewHeight = totalHeight * 0.4f;  // 40% for sphere preview
+
+        // Top section: Full material viewer
+        if (ImGui::BeginChild("MaterialDetails", ImVec2(0, materialViewerHeight), true))
+        {
+            RenderMaterialViewer(materialAsset);
+        }
+        ImGui::EndChild();
+
+        // Bottom section: Sphere preview
+        if (ImGui::BeginChild("SpherePreview", ImVec2(0, 0), true))
+        {
+            try {
+                CPakAsset* pakAsset = static_cast<CPakAsset*>(materialAsset);
+                if (pakAsset && pakAsset->extraData()) {
+                    const MaterialAsset* const material = reinterpret_cast<MaterialAsset*>(pakAsset->extraData());
+                    if (material) {
+                        RenderMaterialSpherePreview(material, materialAsset);
+                    } else {
+                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to cast material data");
+                    }
+                } else {
+                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Material data not loaded");
+                }
+            } catch (const std::exception& e) {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error loading material: %s", e.what());
+            } catch (...) {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Unknown error loading material");
+            }
+        }
+        ImGui::EndChild();
+
         ImGui::Unindent(8.0f);
         ImGui::Spacing();
     }
@@ -3194,11 +3287,6 @@ namespace ModernUI
                         ImGui::EndTabItem();
                     }
 
-                    if (ImGui::BeginTabItem("Sphere Preview"))
-                    {
-                        RenderMaterialSpherePreview(material, materialAsset);
-                        ImGui::EndTabItem();
-                    }
 
                     ImGui::EndTabBar();
                 }
